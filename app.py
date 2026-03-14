@@ -223,9 +223,9 @@ class TypingExamApp:
 
         scroll_body.bind("<Configure>", _sync_setup_scroll_region)
         canvas.bind("<Configure>", _resize_setup_card)
-        canvas.bind_all("<MouseWheel>", _on_setup_mousewheel)
-        canvas.bind_all("<Button-4>", _on_setup_mousewheel)
-        canvas.bind_all("<Button-5>", _on_setup_mousewheel)
+        canvas.bind_all("<MouseWheel>", _on_setup_mousewheel, add=True)
+        canvas.bind_all("<Button-4>", _on_setup_mousewheel, add=True)
+        canvas.bind_all("<Button-5>", _on_setup_mousewheel, add=True)
 
         self.setup_canvas = canvas
         self.setup_scroll_body = scroll_body
@@ -277,7 +277,7 @@ class TypingExamApp:
         self.setup_preview_box = tk.Text(
             preview_frame,
             wrap="word",
-            height=8,
+            height=5,
             font=self.english_font,
             padx=10,
             pady=10,
@@ -403,6 +403,7 @@ class TypingExamApp:
         )
         self.input_box.grid(row=0, column=0, sticky="nsew")
         self.input_box.bind("<KeyRelease>", self._on_input_key_release)
+        self.input_box.bind("<FocusIn>", self._on_input_focus)
 
         bottom_bar = ttk.Frame(card, style="Card.TFrame")
         bottom_bar.grid(row=2, column=0, sticky="ew", pady=(14, 0))
@@ -416,8 +417,47 @@ class TypingExamApp:
     def _build_result_page(self) -> ttk.Frame:
         page = ttk.Frame(self.page_host, style="App.TFrame")
 
-        card = ttk.Frame(page, style="Card.TFrame", padding=20)
-        card.pack(fill="both", expand=True)
+        layout = ttk.Frame(page, style="App.TFrame")
+        layout.pack(fill="both", expand=True)
+        layout.columnconfigure(0, weight=1)
+        layout.rowconfigure(0, weight=1)
+
+        canvas = tk.Canvas(layout, bg="#fffdf8", highlightthickness=0, borderwidth=0)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(layout, orient="vertical", command=canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scroll_body = ttk.Frame(canvas, style="Card.TFrame")
+        canvas_window = canvas.create_window((0, 0), window=scroll_body, anchor="n")
+
+        def _sync_result_scroll(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            cw = canvas.winfo_width()
+            if cw > 0:
+                canvas.itemconfigure(canvas_window, width=cw)
+
+        def _on_result_mousewheel(event) -> str | None:
+            if not page.winfo_ismapped():
+                return None
+            delta = event.delta
+            if delta == 0 and getattr(event, "num", None) in (4, 5):
+                delta = 120 if event.num == 4 else -120
+            if delta:
+                canvas.yview_scroll(int(-delta / 120), "units")
+                return "break"
+            return None
+
+        scroll_body.bind("<Configure>", _sync_result_scroll)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(canvas_window, width=e.width))
+        canvas.bind_all("<MouseWheel>", _on_result_mousewheel, add=True)
+        canvas.bind_all("<Button-4>", _on_result_mousewheel, add=True)
+        canvas.bind_all("<Button-5>", _on_result_mousewheel, add=True)
+
+        self.result_canvas = canvas
+
+        card = ttk.Frame(scroll_body, style="Card.TFrame", padding=20)
+        card.pack(fill="x", expand=True, padx=10, pady=10)
         card.columnconfigure(0, weight=1)
         card.columnconfigure(1, weight=1)
 
@@ -449,9 +489,9 @@ class TypingExamApp:
             "Result",
         ]
         for index, label in enumerate(labels):
-            ttk.Label(metrics, text=label, style="Body.TLabel").grid(row=index, column=0, sticky="w", pady=5)
+            ttk.Label(metrics, text=label, style="Body.TLabel").grid(row=index, column=0, sticky="w", pady=4)
             value = ttk.Label(metrics, text="-", style="Value.TLabel")
-            value.grid(row=index, column=1, sticky="w", padx=(16, 0), pady=5)
+            value.grid(row=index, column=1, sticky="w", padx=(16, 0), pady=4)
             self.result_labels[label] = value
 
         note_frame = ttk.LabelFrame(card, text="Typed Text Review", style="Section.TLabelframe", padding=12)
@@ -469,17 +509,17 @@ class TypingExamApp:
             borderwidth=1,
             background="#f8fafc",
             state="disabled",
-            height=18,
+            height=10,
         )
         self.result_typed_box.grid(row=0, column=0, sticky="nsew")
 
         actions = ttk.Frame(card, style="Card.TFrame")
-        actions.grid(row=2, column=0, columnspan=2, sticky="w", pady=(20, 0))
+        actions.grid(row=2, column=0, columnspan=2, sticky="w", pady=(14, 0))
         ttk.Button(actions, text="New Test", style="Primary.TButton", command=self._start_new_test_from_result).pack(side="left")
         ttk.Button(actions, text="Retry Same Test", command=self._retry_current_test).pack(side="left", padx=(10, 0))
 
-        ad_frame = ttk.LabelFrame(card, text="Institute", style="Section.TLabelframe", padding=18)
-        ad_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(18, 0))
+        ad_frame = ttk.LabelFrame(card, text="Institute", style="Section.TLabelframe", padding=14)
+        ad_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(14, 0))
         ad_frame.columnconfigure(0, weight=1)
 
         ad_inner = ttk.Frame(ad_frame, style="Card.TFrame")
@@ -487,19 +527,19 @@ class TypingExamApp:
         ad_inner.columnconfigure(0, weight=1)
 
         self.result_banner_label = tk.Label(ad_inner, bg="#fffdf8")
-        self.result_banner_label.grid(row=0, column=0, pady=(0, 18))
+        self.result_banner_label.grid(row=0, column=0, pady=(0, 12))
         self._set_banner_image(self.result_banner_label, self.result_banner_image, "(Result banner)")
 
         tk.Label(
             ad_inner,
             text=COMPANY_NAME,
-            font=("Segoe UI", 15, "bold"),
+            font=("Segoe UI", 13, "bold"),
             bg="#fffdf8",
             fg="#183153",
-        ).grid(row=1, column=0, pady=(0, 6))
-        ttk.Label(ad_inner, text=COMPANY_TAGLINE, style="Body.TLabel", justify="center").grid(row=2, column=0, pady=(0, 4))
-        ttk.Label(ad_inner, text=f"Call: {COMPANY_PHONE}", style="Body.TLabel", justify="center").grid(row=3, column=0, pady=(0, 4))
-        ttk.Label(ad_inner, text=COMPANY_BANNER_SIZE, style="Muted.TLabel", justify="center").grid(row=4, column=0, pady=(0, 12))
+        ).grid(row=1, column=0, pady=(0, 4))
+        ttk.Label(ad_inner, text=COMPANY_TAGLINE, style="Body.TLabel", justify="center").grid(row=2, column=0, pady=(0, 3))
+        ttk.Label(ad_inner, text=f"Call: {COMPANY_PHONE}", style="Body.TLabel", justify="center").grid(row=3, column=0, pady=(0, 3))
+        ttk.Label(ad_inner, text=COMPANY_BANNER_SIZE, style="Muted.TLabel", justify="center").grid(row=4, column=0, pady=(0, 8))
 
         ad_actions = ttk.Frame(ad_inner, style="Card.TFrame")
         ad_actions.grid(row=5, column=0)
@@ -517,6 +557,8 @@ class TypingExamApp:
 
         if page_name == "setup" and self.setup_canvas is not None:
             self.setup_canvas.yview_moveto(0)
+        if page_name == "result" and hasattr(self, "result_canvas") and self.result_canvas is not None:
+            self.result_canvas.yview_moveto(0)
 
         titles = {
             "setup": "1. Test Setup",
@@ -552,6 +594,66 @@ class TypingExamApp:
             self.root.tk.call("tk", "useinputmethods", True)
         except tk.TclError:
             pass
+
+    def _setup_win_ime(self, widget: tk.Text) -> None:
+        """Set Windows IME/ISM composition font so ISM recognises the widget as Devanagari-capable."""
+        if not sys.platform.startswith("win"):
+            return
+        if self.language_var.get() not in {"Marathi", "Hindi"}:
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class LOGFONTW(ctypes.Structure):
+                _fields_ = [
+                    ("lfHeight", wintypes.LONG),
+                    ("lfWidth", wintypes.LONG),
+                    ("lfEscapement", wintypes.LONG),
+                    ("lfOrientation", wintypes.LONG),
+                    ("lfWeight", wintypes.LONG),
+                    ("lfItalic", wintypes.BYTE),
+                    ("lfUnderline", wintypes.BYTE),
+                    ("lfStrikeOut", wintypes.BYTE),
+                    ("lfCharSet", wintypes.BYTE),
+                    ("lfOutPrecision", wintypes.BYTE),
+                    ("lfClipPrecision", wintypes.BYTE),
+                    ("lfQuality", wintypes.BYTE),
+                    ("lfPitchAndFamily", wintypes.BYTE),
+                    ("lfFaceName", ctypes.c_wchar * 32),
+                ]
+
+            widget.update_idletasks()
+            hwnd = widget.winfo_id()
+            font_name = self.indic_font_family
+            font_size = self.indic_font_size
+
+            lf = LOGFONTW()
+            lf.lfHeight = -(font_size + 4)
+            lf.lfWeight = 400
+            lf.lfCharSet = 0
+            lf.lfFaceName = font_name
+
+            gdi32 = ctypes.windll.gdi32
+            user32 = ctypes.windll.user32
+            imm32 = ctypes.windll.imm32
+
+            hfont = gdi32.CreateFontIndirectW(ctypes.byref(lf))
+            if hfont:
+                WM_SETFONT = 0x0030
+                user32.SendMessageW(hwnd, WM_SETFONT, hfont, 1)
+
+            himc = imm32.ImmGetContext(hwnd)
+            if himc:
+                imm32.ImmSetCompositionFontW(himc, ctypes.byref(lf))
+                imm32.ImmReleaseContext(hwnd, himc)
+        except Exception:
+            pass
+
+    def _on_input_focus(self, _event=None) -> None:
+        """Re-apply IME font each time the input box receives focus."""
+        if self.language_var.get() in {"Marathi", "Hindi"}:
+            self._setup_win_ime(self.input_box)
 
     def _try_register_local_nirmala(self) -> bool:
         font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Nirmala UI Regular.ttf")
@@ -778,6 +880,7 @@ class TypingExamApp:
                 maxundo=0,
                 **common_options,
             )
+            self._setup_win_ime(self.input_box)
             self.status_text.set("Windows Marathi/Hindi compatibility mode enabled for typing.")
             return
 
@@ -905,14 +1008,14 @@ class TypingExamApp:
     def _preview_font_size(self) -> int:
         width = max(self.root.winfo_width(), 900)
         if width < 980:
-            return 13
-        return 15
+            return 11
+        return 13
 
     def _passage_font_size(self) -> int:
         width = max(self.root.winfo_width(), 900)
         height = max(self.root.winfo_height(), 620)
         content_length = max(len(self.current_passage), 1)
-        size = 16
+        size = 15
         if width < 1100:
             size -= 1
         if width < 980:
@@ -963,7 +1066,7 @@ class TypingExamApp:
         typed_text = self.input_box.get("1.0", "end-1c")
         if typed_text and set(typed_text) == {"?"}:
             self.status_text.set(
-                "Unicode input is not reaching the app. Use a Unicode Devanagari keyboard/font; legacy ISM layouts may send only '?'."
+                "ISM is sending '?' — switch ISM to Unicode mode, or use Windows Marathi/Hindi keyboard (Settings > Language) instead of legacy ISM."
             )
 
     def _pick_builtin_passage(self, language: str) -> str:
