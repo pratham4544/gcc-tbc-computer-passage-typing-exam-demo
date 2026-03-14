@@ -1,16 +1,36 @@
+from __future__ import annotations
+
 import os
 import random
-import subprocess
 import sys
-import tempfile
 import time
-import tkinter as tk
 import webbrowser
 import zipfile
 from dataclasses import dataclass
-from tkinter import font as tkfont
-from tkinter import messagebox, ttk
 from xml.etree import ElementTree as ET
+
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QResizeEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QBoxLayout,
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 ENGLISH_PASSAGES = [
@@ -65,7 +85,7 @@ APP_NAMES = [
 COMPANY_NAME = "Pushpanjali Computer Typing Institute, Dahiwadi"
 COMPANY_TAGLINE = "Free typing practice software by Pushpanjali Computer Typing Institute."
 COMPANY_PHONE = "9970939341"
-COMPANY_BANNER_SIZE = "Recommended banner size: 1200 x 300 px"
+COMPANY_BANNER_SIZE = "Recommended banner size: 800 x 150 px (PNG)"
 QUESTION_PAPER_DIR = "Oct 2025 exam question paper"
 TOTAL_MARKS = 40
 PASS_MARKS = 16
@@ -80,22 +100,19 @@ QUESTION_PAPER_KEYS = {
 }
 
 
-class TypingExamApp:
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-        self.root.title("Typing Exam Practice")
+class TypingExamApp(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Typing Exam Practice")
         self._configure_window()
-        self.root.configure(bg="#f3efe7")
-        self._enable_input_methods()
 
-        self.selected_profile = tk.StringVar(value="English 30 WPM")
-        self.candidate_name_var = tk.StringVar()
-        self.language_var = tk.StringVar(value="English")
-        self.practice_language_var = tk.StringVar(value="English")
-        self.timer_text = tk.StringVar(value="07:00")
-        self.page_title_text = tk.StringVar(value="1. Test Setup")
-        self.status_text = tk.StringVar(value="Choose a test type and load a passage.")
-        self.font_info_text = tk.StringVar(value="")
+        self._selected_profile = "English 30 WPM"
+        self._language = "English"
+        self._practice_language = "English"
+        self._timer_text = "07:00"
+        self._page_title_text = "1. Test Setup"
+        self._status_text = "Choose a test type and load a passage."
+        self._font_info_text = ""
 
         self.current_profile = PROFILES["English 30 WPM"]
         self.current_passage = ""
@@ -103,765 +120,669 @@ class TypingExamApp:
         self.active_result: dict[str, str] = {}
         self.test_running = False
         self.start_time = 0.0
-        self.timer_job: str | None = None
-        self.resize_job: str | None = None
-        self.local_nirmala_registered = self._try_register_local_nirmala()
-        self.setup_banner_image = self._load_png("img1.png")
-        self.result_banner_image = self._load_png("img2.png")
-        self.setup_canvas: tk.Canvas | None = None
-        self.setup_scroll_body: ttk.Frame | None = None
-        self.split_frame: ttk.Frame | None = None
-        self.top_bar: ttk.Frame | None = None
-        self.external_editor_file: str | None = None
-        self.external_editor_process: subprocess.Popen | None = None
-        self.using_external_editor = False
+        self.timer: QTimer | None = None
+        self.resize_timer: QTimer | None = None
 
+        self._register_local_nirmala()
         self.english_font_family = "Segoe UI"
         self.english_font_size = 16
         self.indic_font_family, self.indic_font_size = self._resolve_indic_font()
-        self.english_font = (self.english_font_family, self.english_font_size)
-        self.indic_font = (self.indic_font_family, self.indic_font_size)
         self.external_passages = self._load_external_docx_passages()
 
-        self._configure_styles()
+        self.setup_banner_pixmap = self._load_png("img1.png")
+        self.result_banner_pixmap = self._load_png("img2.png")
+
+        self._apply_stylesheet()
         self._build_ui()
         self._update_language_mode()
         self._set_passage_for_current_selection()
-        self.root.bind("<Configure>", self._on_window_resized)
-        self.root.after(50, self._apply_responsive_layout)
+        QTimer.singleShot(50, self._apply_responsive_layout)
         self._show_page("setup")
 
+    # ── window config ──────────────────────────────────────────────
+
     def _configure_window(self) -> None:
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        width = min(1180, max(900, int(screen_width * 0.9)))
-        height = min(760, max(620, int(screen_height * 0.88)))
-        pos_x = max((screen_width - width) // 2, 0)
-        pos_y = max((screen_height - height) // 2, 0)
-        self.root.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
-        self.root.minsize(900, 620)
+        screen = QApplication.primaryScreen()
+        screen_size = screen.availableSize()
+        sw, sh = screen_size.width(), screen_size.height()
+        width = min(1180, max(900, int(sw * 0.9)))
+        height = min(760, max(620, int(sh * 0.88)))
+        px = max((sw - width) // 2, 0)
+        py = max((sh - height) // 2, 0)
+        self.resize(width, height)
+        self.move(px, py)
+        self.setMinimumSize(900, 620)
 
-    def _configure_styles(self) -> None:
-        self.style = ttk.Style()
-        available_themes = self.style.theme_names()
-        if "clam" in available_themes:
-            self.style.theme_use("clam")
+    # ── stylesheet ─────────────────────────────────────────────────
 
-        self.style.configure("App.TFrame", background="#f3efe7")
-        self.style.configure("Card.TFrame", background="#fffdf8")
-        self.style.configure("Hero.TFrame", background="#1f3a5f")
-        self.style.configure("Section.TLabelframe", background="#fffdf8", borderwidth=1)
-        self.style.configure("InfoCard.TFrame", background="#eef3f8")
-        self._apply_style_scale()
+    def _apply_stylesheet(self, scale: str = "normal") -> None:
+        if scale == "compact":
+            hero_t, hero_b = 18, 9
+            sec, body, muted, val = 10, 9, 8, 11
+            btn, it, iv = 9, 8, 11
+            pt, st = 13, 9
+        else:
+            hero_t, hero_b = 21, 10
+            sec, body, muted, val = 11, 10, 9, 12
+            btn, it, iv = 10, 9, 13
+            pt, st = 15, 10
+
+        self.setStyleSheet(f"""
+            QMainWindow, QWidget {{ background-color: #f3efe7; }}
+            QFrame#hero {{ background-color: #1f3a5f; border-radius: 4px; }}
+            QLabel#heroTitle {{
+                color: #ffffff; font-family: "Segoe UI"; font-size: {hero_t}pt;
+                font-weight: bold; background: transparent;
+            }}
+            QLabel#heroBody {{
+                color: #d9e4f2; font-family: "Segoe UI"; font-size: {hero_b}pt;
+                background: transparent;
+            }}
+            QLabel#pageTitle {{
+                color: #183153; font-family: "Segoe UI"; font-size: {pt}pt;
+                font-weight: bold; background: transparent;
+            }}
+            QLabel#statusText {{
+                color: #52606d; font-family: "Segoe UI"; font-size: {st}pt;
+                background: transparent;
+            }}
+            QFrame#cardFrame {{
+                background-color: #fffdf8; border: 1px solid #e0ddd6; border-radius: 4px;
+            }}
+            QGroupBox#sectionGroup {{
+                background-color: #fffdf8; border: 1px solid #d0cdc6; border-radius: 4px;
+                font-family: "Segoe UI"; font-size: {sec}pt; font-weight: bold;
+                color: #183153; padding-top: 16px; margin-top: 8px;
+            }}
+            QGroupBox#sectionGroup::title {{
+                subcontrol-origin: margin; subcontrol-position: top left; padding: 0 6px;
+            }}
+            QLabel#bodyLabel {{
+                color: #243447; font-family: "Segoe UI"; font-size: {body}pt; background: transparent;
+            }}
+            QLabel#mutedLabel {{
+                color: #5f6b7a; font-family: "Segoe UI"; font-size: {muted}pt; background: transparent;
+            }}
+            QLabel#valueLabel {{
+                color: #10233d; font-family: "Segoe UI"; font-size: {val}pt;
+                font-weight: bold; background: transparent;
+            }}
+            QFrame#infoCard {{
+                background-color: #eef3f8; border: 1px solid #d4dde7; border-radius: 4px;
+            }}
+            QLabel#infoTitle {{
+                color: #5a6b7b; font-family: "Segoe UI"; font-size: {it}pt;
+                font-weight: bold; background: transparent;
+            }}
+            QLabel#infoValue {{
+                color: #17324d; font-family: "Segoe UI"; font-size: {iv}pt;
+                font-weight: bold; background: transparent;
+            }}
+            QLabel#infoValueMono {{
+                color: #17324d; font-family: "Consolas"; font-size: {iv}pt;
+                font-weight: bold; background: transparent;
+            }}
+            QPushButton {{
+                font-family: "Segoe UI"; font-size: {btn}pt; padding: 6px 16px;
+                border: 1px solid #b0b8c1; border-radius: 4px; background-color: #f0ede6;
+            }}
+            QPushButton:hover {{ background-color: #e4e0d8; }}
+            QPushButton#primaryButton {{
+                font-weight: bold; background-color: #1f3a5f; color: #ffffff;
+                border: 1px solid #1a3050;
+            }}
+            QPushButton#primaryButton:hover {{ background-color: #2a4a72; }}
+            QLabel#resultTitle {{
+                color: #183153; font-family: "Segoe UI"; font-size: 18pt;
+                font-weight: bold; background: transparent;
+            }}
+            QLabel#instituteName {{
+                color: #183153; font-family: "Segoe UI"; font-size: 13pt;
+                font-weight: bold; background: transparent;
+            }}
+            QComboBox {{
+                font-family: "Segoe UI"; font-size: {body}pt; padding: 4px 8px;
+                border: 1px solid #b0b8c1; border-radius: 3px; background-color: #ffffff;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: #ffffff; selection-background-color: #1f3a5f;
+                selection-color: #ffffff;
+            }}
+            QLineEdit {{
+                font-family: "Segoe UI"; font-size: {body}pt; padding: 4px 8px;
+                border: 1px solid #b0b8c1; border-radius: 3px; background-color: #ffffff;
+            }}
+            QScrollArea {{ border: none; }}
+            QScrollBar:vertical {{
+                width: 12px; background-color: #f3efe7;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: #c0bdb6; border-radius: 4px; min-height: 30px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+
+    # ── build UI ───────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        shell = ttk.Frame(self.root, style="App.TFrame", padding=18)
-        shell.pack(fill="both", expand=True)
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(18, 18, 18, 18)
 
-        hero = ttk.Frame(shell, style="Hero.TFrame", padding=(20, 18))
-        hero.pack(fill="x")
-        ttk.Label(hero, text="Offline Typing Exam Practice", style="HeroTitle.TLabel").pack(anchor="w")
-        ttk.Label(
-            hero,
-            text="Windows-targeted exam simulator with English, Marathi, Hindi, and optional exam-question DOCX loading.",
-            style="HeroBody.TLabel",
-        ).pack(anchor="w", pady=(6, 0))
-
-        nav = ttk.Frame(shell, style="App.TFrame", padding=(0, 14, 0, 8))
-        nav.pack(fill="x")
-        self.page_title_label = tk.Label(
-            nav,
-            textvariable=self.page_title_text,
-            font=("Segoe UI", 15, "bold"),
-            bg="#f3efe7",
-            fg="#183153",
+        hero = QFrame()
+        hero.setObjectName("hero")
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(20, 18, 20, 18)
+        ht = QLabel("Offline Typing Exam Practice")
+        ht.setObjectName("heroTitle")
+        hb = QLabel(
+            "Windows-targeted exam simulator with English, Marathi, Hindi, "
+            "and optional exam-question DOCX loading."
         )
-        self.page_title_label.pack(side="left")
-        self.status_label = tk.Label(nav, textvariable=self.status_text, bg="#f3efe7", fg="#52606d")
-        self.status_label.pack(side="right")
+        hb.setObjectName("heroBody")
+        hero_layout.addWidget(ht)
+        hero_layout.addWidget(hb)
+        main_layout.addWidget(hero)
 
-        self.page_host = ttk.Frame(shell, style="App.TFrame")
-        self.page_host.pack(fill="both", expand=True)
+        nav = QHBoxLayout()
+        nav.setContentsMargins(0, 14, 0, 8)
+        self.page_title_label = QLabel(self._page_title_text)
+        self.page_title_label.setObjectName("pageTitle")
+        self.status_label = QLabel(self._status_text)
+        self.status_label.setObjectName("statusText")
+        nav.addWidget(self.page_title_label)
+        nav.addStretch()
+        nav.addWidget(self.status_label)
+        main_layout.addLayout(nav)
 
-        self.pages: dict[str, ttk.Frame] = {}
-        self.pages["setup"] = self._build_setup_page()
-        self.pages["test"] = self._build_test_page()
-        self.pages["result"] = self._build_result_page()
+        self.page_stack = QStackedWidget()
+        self.page_stack.addWidget(self._build_setup_page())
+        self.page_stack.addWidget(self._build_test_page())
+        self.page_stack.addWidget(self._build_result_page())
+        main_layout.addWidget(self.page_stack, stretch=1)
 
-    def _build_setup_page(self) -> ttk.Frame:
-        page = ttk.Frame(self.page_host, style="App.TFrame")
+    # ── setup page ─────────────────────────────────────────────────
 
-        layout = ttk.Frame(page, style="App.TFrame")
-        layout.pack(fill="both", expand=True)
-        layout.columnconfigure(0, weight=1)
-        layout.rowconfigure(0, weight=1)
+    def _build_setup_page(self) -> QWidget:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
 
-        canvas = tk.Canvas(layout, bg="#f3efe7", highlightthickness=0, borderwidth=0)
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(layout, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        self.setup_scroll_area = QScrollArea()
+        self.setup_scroll_area.setWidgetResizable(True)
+        self.setup_scroll_area.setFrameShape(QFrame.NoFrame)
 
-        scroll_body = ttk.Frame(canvas, style="App.TFrame")
-        canvas_window = canvas.create_window((0, 0), window=scroll_body, anchor="n")
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setAlignment(Qt.AlignHCenter)
 
-        def _sync_setup_scroll_region(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            canvas_width = canvas.winfo_width()
-            if canvas_width > 0:
-                canvas.itemconfigure(canvas_window, width=canvas_width)
+        center_card = QGroupBox("Exam Setup")
+        center_card.setObjectName("sectionGroup")
+        center_card.setMaximumWidth(960)
+        center_card.setMinimumWidth(700)
+        card_layout = QGridLayout(center_card)
+        card_layout.setContentsMargins(22, 28, 22, 22)
+        card_layout.setColumnStretch(0, 1)
+        card_layout.setColumnStretch(1, 1)
 
-        def _resize_setup_card(_event) -> None:
-            width = min(max(_event.width - 48, 760), 960)
-            center_card.configure(width=width)
+        desc = QLabel("Select exam details and start the practice test.")
+        desc.setObjectName("bodyLabel")
+        desc.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(desc, 0, 0, 1, 2)
 
-        def _on_setup_mousewheel(event) -> str | None:
-            if not page.winfo_ismapped():
-                return None
-            delta = event.delta
-            if delta == 0 and getattr(event, "num", None) in (4, 5):
-                delta = 120 if event.num == 4 else -120
-            if delta:
-                canvas.yview_scroll(int(-delta / 120), "units")
-                return "break"
-            return None
+        lbl_name = QLabel("Candidate Name")
+        lbl_name.setObjectName("bodyLabel")
+        card_layout.addWidget(lbl_name, 1, 0)
+        self.candidate_name_input = QLineEdit()
+        card_layout.addWidget(self.candidate_name_input, 1, 1)
 
-        scroll_body.bind("<Configure>", _sync_setup_scroll_region)
-        canvas.bind("<Configure>", _resize_setup_card)
-        canvas.bind_all("<MouseWheel>", _on_setup_mousewheel, add=True)
-        canvas.bind_all("<Button-4>", _on_setup_mousewheel, add=True)
-        canvas.bind_all("<Button-5>", _on_setup_mousewheel, add=True)
+        lbl_exam = QLabel("Exam Type")
+        lbl_exam.setObjectName("bodyLabel")
+        card_layout.addWidget(lbl_exam, 2, 0)
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItems(list(PROFILES.keys()))
+        self.profile_combo.setCurrentText(self._selected_profile)
+        self.profile_combo.currentTextChanged.connect(self._on_profile_changed)
+        card_layout.addWidget(self.profile_combo, 2, 1)
 
-        self.setup_canvas = canvas
-        self.setup_scroll_body = scroll_body
+        lbl_lang = QLabel("Language")
+        lbl_lang.setObjectName("bodyLabel")
+        card_layout.addWidget(lbl_lang, 3, 0)
+        self.language_control = QComboBox()
+        self.language_control.addItems(["English", "Marathi", "Hindi"])
+        self.language_control.setEnabled(False)
+        self.language_control.currentTextChanged.connect(self._on_practice_language_changed)
+        card_layout.addWidget(self.language_control, 3, 1)
 
-        center_card = ttk.LabelFrame(scroll_body, text="Exam Setup", style="Section.TLabelframe", padding=22)
-        center_card.pack(fill="x", expand=True, padx=24, pady=18)
-        center_card.columnconfigure(0, weight=1)
-        center_card.columnconfigure(1, weight=1)
+        lbl_time = QLabel("Time")
+        lbl_time.setObjectName("bodyLabel")
+        card_layout.addWidget(lbl_time, 4, 0)
+        self.setup_time_label = QLabel(self._timer_text)
+        self.setup_time_label.setObjectName("valueLabel")
+        card_layout.addWidget(self.setup_time_label, 4, 1)
 
-        ttk.Label(
-            center_card,
-            text="Select exam details and start the practice test.",
-            style="Body.TLabel",
-        ).grid(row=0, column=0, columnspan=2, sticky="n", pady=(0, 16))
+        preview_group = QGroupBox("Current Passage Preview")
+        preview_group.setObjectName("sectionGroup")
+        preview_layout = QVBoxLayout(preview_group)
+        self.setup_preview_box = QTextEdit()
+        self.setup_preview_box.setReadOnly(True)
+        self.setup_preview_box.setStyleSheet("background-color: #f8fafc; border: 1px solid #ccc;")
+        self.setup_preview_box.setMaximumHeight(140)
+        preview_layout.addWidget(self.setup_preview_box)
+        card_layout.addWidget(preview_group, 5, 0, 1, 2)
 
-        ttk.Label(center_card, text="Candidate Name", style="Body.TLabel").grid(row=1, column=0, sticky="w")
-        ttk.Entry(center_card, textvariable=self.candidate_name_var, width=32).grid(
-            row=1, column=1, sticky="ew", padx=(14, 0), pady=(0, 12)
+        self.font_note = QLabel(self._font_info_text)
+        self.font_note.setObjectName("bodyLabel")
+        self.font_note.setWordWrap(True)
+        self.font_note.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(self.font_note, 6, 0, 1, 2)
+
+        deva_note = QLabel(
+            "Marathi and Hindi on Ubuntu need a Devanagari font. "
+            "This app prefers Mangal, then Nirmala UI, then fonts such as Noto Sans Devanagari."
         )
+        deva_note.setObjectName("mutedLabel")
+        deva_note.setWordWrap(True)
+        deva_note.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(deva_note, 7, 0, 1, 2)
 
-        ttk.Label(center_card, text="Exam Type", style="Body.TLabel").grid(row=2, column=0, sticky="w")
-        profile_menu = ttk.Combobox(
-            center_card,
-            textvariable=self.selected_profile,
-            state="readonly",
-            values=list(PROFILES.keys()),
-            width=30,
+        docx_note = QLabel(
+            f"If present, DOCX passages are loaded automatically from: {QUESTION_PAPER_DIR}"
         )
-        profile_menu.grid(row=2, column=1, sticky="ew", padx=(14, 0), pady=(0, 12))
-        profile_menu.bind("<<ComboboxSelected>>", self._on_profile_changed)
+        docx_note.setObjectName("mutedLabel")
+        docx_note.setWordWrap(True)
+        docx_note.setAlignment(Qt.AlignCenter)
+        card_layout.addWidget(docx_note, 8, 0, 1, 2)
 
-        ttk.Label(center_card, text="Language", style="Body.TLabel").grid(row=3, column=0, sticky="w")
-        self.language_control = ttk.Combobox(
-            center_card,
-            textvariable=self.practice_language_var,
-            state="disabled",
-            values=["English", "Marathi", "Hindi"],
-            width=18,
-        )
-        self.language_control.grid(row=3, column=1, sticky="w", padx=(14, 0), pady=(0, 12))
-        self.language_control.bind("<<ComboboxSelected>>", self._on_practice_language_changed)
+        actions_layout = QHBoxLayout()
+        actions_layout.setAlignment(Qt.AlignCenter)
+        load_btn = QPushButton("Load Random Passage")
+        load_btn.clicked.connect(self._refresh_passage)
+        start_btn = QPushButton("Start Test")
+        start_btn.setObjectName("primaryButton")
+        start_btn.clicked.connect(self.start_test)
+        actions_layout.addWidget(load_btn)
+        actions_layout.addWidget(start_btn)
+        card_layout.addLayout(actions_layout, 9, 0, 1, 2)
 
-        ttk.Label(center_card, text="Time", style="Body.TLabel").grid(row=4, column=0, sticky="w")
-        self.setup_time_label = ttk.Label(center_card, textvariable=self.timer_text, style="Value.TLabel")
-        self.setup_time_label.grid(row=4, column=1, sticky="w", padx=(14, 0), pady=(0, 12))
+        institute_layout = QVBoxLayout()
+        institute_layout.setAlignment(Qt.AlignCenter)
+        inst_name = QLabel(COMPANY_NAME)
+        inst_name.setObjectName("instituteName")
+        inst_name.setAlignment(Qt.AlignCenter)
+        institute_layout.addWidget(inst_name)
+        phone_lbl = QLabel(f"Call: {COMPANY_PHONE}")
+        phone_lbl.setObjectName("bodyLabel")
+        phone_lbl.setAlignment(Qt.AlignCenter)
+        institute_layout.addWidget(phone_lbl)
+        self.setup_banner_label = QLabel()
+        self.setup_banner_label.setAlignment(Qt.AlignCenter)
+        self._set_banner_image(self.setup_banner_label, self.setup_banner_pixmap, "(Setup banner)")
+        institute_layout.addWidget(self.setup_banner_label)
+        card_layout.addLayout(institute_layout, 10, 0, 1, 2)
 
-        preview_frame = ttk.LabelFrame(center_card, text="Current Passage Preview", style="Section.TLabelframe", padding=12)
-        preview_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 14))
-        self.setup_preview_box = tk.Text(
-            preview_frame,
-            wrap="word",
-            height=5,
-            font=self.english_font,
-            padx=10,
-            pady=10,
-            relief="solid",
-            borderwidth=1,
-            background="#f8fafc",
-            state="disabled",
-            width=70,
-        )
-        self.setup_preview_box.pack(fill="both", expand=True)
-
-        self.font_note = ttk.Label(
-            center_card,
-            textvariable=self.font_info_text,
-            style="Body.TLabel",
-            wraplength=620,
-            justify="center",
-        )
-        self.font_note.grid(row=6, column=0, columnspan=2, sticky="n", pady=(0, 6))
-
-        ttk.Label(
-            center_card,
-            text=(
-                "Marathi and Hindi on Ubuntu need a Devanagari font. This app prefers Mangal, then Nirmala UI, then fonts such as Noto Sans Devanagari."
-            ),
-            style="Muted.TLabel",
-            wraplength=620,
-            justify="center",
-        ).grid(row=7, column=0, columnspan=2, sticky="n", pady=(0, 12))
-
-        ttk.Label(
-            center_card,
-            text=f"If present, DOCX passages are loaded automatically from: {QUESTION_PAPER_DIR}",
-            style="Muted.TLabel",
-            wraplength=620,
-            justify="center",
-        ).grid(row=8, column=0, columnspan=2, sticky="n", pady=(0, 12))
-
-        actions = ttk.Frame(center_card, style="Card.TFrame")
-        actions.grid(row=9, column=0, columnspan=2, pady=(4, 14))
-        ttk.Button(actions, text="Load Random Passage", command=self._refresh_passage).pack(side="left")
-        ttk.Button(actions, text="Start Test", style="Primary.TButton", command=self.start_test).pack(side="left", padx=(12, 0))
-
-        institute_box = ttk.Frame(center_card, style="Card.TFrame")
-        institute_box.grid(row=10, column=0, columnspan=2, sticky="ew")
-        institute_box.columnconfigure(0, weight=1)
-        tk.Label(
-            institute_box,
-            text=COMPANY_NAME,
-            font=("Segoe UI", 13, "bold"),
-            bg="#fffdf8",
-            fg="#183153",
-        ).grid(row=0, column=0, pady=(0, 6))
-        ttk.Label(institute_box, text=f"Call: {COMPANY_PHONE}", style="Body.TLabel").grid(row=1, column=0, pady=(0, 10))
-        self.setup_banner_label = tk.Label(institute_box, bg="#fffdf8")
-        self.setup_banner_label.grid(row=2, column=0)
-        self._set_banner_image(self.setup_banner_label, self.setup_banner_image, "(Setup banner)")
-
+        scroll_layout.addWidget(center_card)
+        self.setup_scroll_area.setWidget(scroll_content)
+        page_layout.addWidget(self.setup_scroll_area)
         return page
 
-    def _build_test_page(self) -> ttk.Frame:
-        page = ttk.Frame(self.page_host, style="App.TFrame")
+    # ── test page ──────────────────────────────────────────────────
 
-        card = ttk.Frame(page, style="Card.TFrame", padding=16)
-        card.pack(fill="both", expand=True)
-        card.columnconfigure(0, weight=1)
-        card.rowconfigure(1, weight=1)
+    def _build_test_page(self) -> QWidget:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
 
-        top_bar = ttk.Frame(card, style="Card.TFrame")
-        top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        top_bar.columnconfigure((0, 1, 2), weight=1)
-        self.top_bar = top_bar
+        card = QFrame()
+        card.setObjectName("cardFrame")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
 
-        self.header_exam_box = self._build_info_card(top_bar, "Exam Type", self.selected_profile)
-        self.header_exam_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self.header_language_box = self._build_info_card(top_bar, "Language", self.language_var)
-        self.header_language_box.grid(row=0, column=1, sticky="ew", padx=4)
-        self.header_timer_box = self._build_info_card(top_bar, "Time Left", self.timer_text, use_mono=True)
-        self.header_timer_box.grid(row=0, column=2, sticky="ew", padx=(8, 0))
-
-        split = ttk.Frame(card, style="Card.TFrame")
-        split.grid(row=1, column=0, sticky="nsew")
-        split.columnconfigure(0, weight=1)
-        split.columnconfigure(1, weight=1)
-        split.rowconfigure(0, weight=1)
-        self.split_frame = split
-
-        passage_card = ttk.LabelFrame(split, text="Passage", style="Section.TLabelframe", padding=12)
-        passage_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
-        passage_card.rowconfigure(0, weight=1)
-        passage_card.columnconfigure(0, weight=1)
-
-        self.passage_box = tk.Text(
-            passage_card,
-            wrap="word",
-            font=self.english_font,
-            padx=12,
-            pady=12,
-            relief="solid",
-            borderwidth=1,
-            background="#f8fafc",
-            state="disabled",
-            width=46,
+        self.top_bar_layout = QBoxLayout(QBoxLayout.LeftToRight)
+        self.header_exam_box, self.header_exam_value = self._build_info_card("Exam Type", self._selected_profile)
+        self.header_language_box, self.header_language_value = self._build_info_card("Language", self._language)
+        self.header_timer_box, self.header_timer_value = self._build_info_card(
+            "Time Left", self._timer_text, use_mono=True
         )
-        self.passage_box.grid(row=0, column=0, sticky="nsew")
+        self.top_bar_layout.addWidget(self.header_exam_box)
+        self.top_bar_layout.addWidget(self.header_language_box)
+        self.top_bar_layout.addWidget(self.header_timer_box)
+        card_layout.addLayout(self.top_bar_layout)
 
-        typing_card = ttk.LabelFrame(split, text="Typing Area", style="Section.TLabelframe", padding=12)
-        typing_card.grid(row=0, column=1, sticky="nsew")
-        typing_card.rowconfigure(0, weight=1)
-        typing_card.columnconfigure(0, weight=1)
+        split = QHBoxLayout()
 
-        self.input_box = tk.Text(
-            typing_card,
-            wrap="word",
-            font=self.english_font,
-            padx=12,
-            pady=12,
-            relief="solid",
-            borderwidth=1,
-            background="#ffffff",
-            undo=True,
-            width=46,
-        )
-        self.input_box.grid(row=0, column=0, sticky="nsew")
-        self.input_box.bind("<KeyRelease>", self._on_input_key_release)
-        self.input_box.bind("<FocusIn>", self._on_input_focus)
+        passage_group = QGroupBox("Passage")
+        passage_group.setObjectName("sectionGroup")
+        passage_layout = QVBoxLayout(passage_group)
+        self.passage_box = QTextEdit()
+        self.passage_box.setReadOnly(True)
+        self.passage_box.setStyleSheet("background-color: #f8fafc; border: 1px solid #ccc;")
+        passage_layout.addWidget(self.passage_box)
 
-        bottom_bar = ttk.Frame(card, style="Card.TFrame")
-        bottom_bar.grid(row=2, column=0, sticky="ew", pady=(14, 0))
+        typing_group = QGroupBox("Typing Area")
+        typing_group.setObjectName("sectionGroup")
+        typing_layout = QVBoxLayout(typing_group)
+        self.input_box = QTextEdit()
+        self.input_box.setStyleSheet("background-color: #ffffff; border: 1px solid #ccc;")
+        self.input_box.setAcceptRichText(False)
+        self.input_box.textChanged.connect(self._on_input_text_changed)
+        typing_layout.addWidget(self.input_box)
 
-        ttk.Button(bottom_bar, text="Back to Setup", command=self._back_to_setup).pack(side="left")
-        ttk.Button(bottom_bar, text="Finish Test", style="Primary.TButton", command=self.finish_test).pack(side="right")
-        ttk.Button(bottom_bar, text="Reset Test", command=self.reset_test).pack(side="right", padx=(0, 10))
+        split.addWidget(passage_group)
+        split.addWidget(typing_group)
+        card_layout.addLayout(split, stretch=1)
 
+        bottom = QHBoxLayout()
+        back_btn = QPushButton("Back to Setup")
+        back_btn.clicked.connect(self._back_to_setup)
+        reset_btn = QPushButton("Reset Test")
+        reset_btn.clicked.connect(self.reset_test)
+        finish_btn = QPushButton("Finish Test")
+        finish_btn.setObjectName("primaryButton")
+        finish_btn.clicked.connect(self.finish_test)
+        bottom.addWidget(back_btn)
+        bottom.addStretch()
+        bottom.addWidget(reset_btn)
+        bottom.addWidget(finish_btn)
+        card_layout.addLayout(bottom)
+
+        page_layout.addWidget(card)
         return page
 
-    def _build_result_page(self) -> ttk.Frame:
-        page = ttk.Frame(self.page_host, style="App.TFrame")
+    # ── result page ────────────────────────────────────────────────
 
-        layout = ttk.Frame(page, style="App.TFrame")
-        layout.pack(fill="both", expand=True)
-        layout.columnconfigure(0, weight=1)
-        layout.rowconfigure(0, weight=1)
+    def _build_result_page(self) -> QWidget:
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
 
-        canvas = tk.Canvas(layout, bg="#fffdf8", highlightthickness=0, borderwidth=0)
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(layout, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        self.result_scroll_area = QScrollArea()
+        self.result_scroll_area.setWidgetResizable(True)
+        self.result_scroll_area.setFrameShape(QFrame.NoFrame)
 
-        scroll_body = ttk.Frame(canvas, style="Card.TFrame")
-        canvas_window = canvas.create_window((0, 0), window=scroll_body, anchor="n")
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background-color: #fffdf8;")
+        scroll_layout = QVBoxLayout(scroll_content)
 
-        def _sync_result_scroll(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            cw = canvas.winfo_width()
-            if cw > 0:
-                canvas.itemconfigure(canvas_window, width=cw)
+        card = QFrame()
+        card.setObjectName("cardFrame")
+        card_grid = QGridLayout(card)
+        card_grid.setContentsMargins(20, 20, 20, 20)
+        card_grid.setColumnStretch(0, 1)
+        card_grid.setColumnStretch(1, 1)
 
-        def _on_result_mousewheel(event) -> str | None:
-            if not page.winfo_ismapped():
-                return None
-            delta = event.delta
-            if delta == 0 and getattr(event, "num", None) in (4, 5):
-                delta = 120 if event.num == 4 else -120
-            if delta:
-                canvas.yview_scroll(int(-delta / 120), "units")
-                return "break"
-            return None
+        title = QLabel("Result Summary")
+        title.setObjectName("resultTitle")
+        card_grid.addWidget(title, 0, 0, 1, 1)
 
-        scroll_body.bind("<Configure>", _sync_result_scroll)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(canvas_window, width=e.width))
-        canvas.bind_all("<MouseWheel>", _on_result_mousewheel, add=True)
-        canvas.bind_all("<Button-4>", _on_result_mousewheel, add=True)
-        canvas.bind_all("<Button-5>", _on_result_mousewheel, add=True)
-
-        self.result_canvas = canvas
-
-        card = ttk.Frame(scroll_body, style="Card.TFrame", padding=20)
-        card.pack(fill="x", expand=True, padx=10, pady=10)
-        card.columnconfigure(0, weight=1)
-        card.columnconfigure(1, weight=1)
-
-        tk.Label(
-            card,
-            text="Result Summary",
-            font=("Segoe UI", 18, "bold"),
-            bg="#fffdf8",
-            fg="#183153",
-        ).grid(row=0, column=0, sticky="w", pady=(0, 16))
-
-        metrics = ttk.Frame(card, style="Card.TFrame")
-        metrics.grid(row=1, column=0, sticky="nw")
-
-        self.result_labels: dict[str, ttk.Label] = {}
+        metrics_widget = QWidget()
+        metrics_widget.setStyleSheet("background: transparent;")
+        metrics_layout = QGridLayout(metrics_widget)
+        self.result_labels: dict[str, QLabel] = {}
         labels = [
-            "Candidate Name",
-            "Exam Type",
-            "Language",
-            "Passage Source",
-            "Elapsed Time",
-            "Total Typed Words",
-            "Matched Words",
-            "Mistakes",
-            "Accuracy",
-            "Speed (WPM)",
-            "Marks",
-            "Target",
-            "Result",
+            "Candidate Name", "Exam Type", "Language", "Passage Source",
+            "Elapsed Time", "Total Typed Words", "Matched Words", "Mistakes",
+            "Accuracy", "Speed (WPM)", "Marks", "Target", "Result",
         ]
-        for index, label in enumerate(labels):
-            ttk.Label(metrics, text=label, style="Body.TLabel").grid(row=index, column=0, sticky="w", pady=4)
-            value = ttk.Label(metrics, text="-", style="Value.TLabel")
-            value.grid(row=index, column=1, sticky="w", padx=(16, 0), pady=4)
-            self.result_labels[label] = value
+        for i, label_text in enumerate(labels):
+            key_label = QLabel(label_text)
+            key_label.setObjectName("bodyLabel")
+            val_label = QLabel("-")
+            val_label.setObjectName("valueLabel")
+            metrics_layout.addWidget(key_label, i, 0)
+            metrics_layout.addWidget(val_label, i, 1)
+            self.result_labels[label_text] = val_label
+        card_grid.addWidget(metrics_widget, 1, 0)
 
-        note_frame = ttk.LabelFrame(card, text="Typed Text Review", style="Section.TLabelframe", padding=12)
-        note_frame.grid(row=1, column=1, sticky="nsew", padx=(24, 0))
-        note_frame.rowconfigure(0, weight=1)
-        note_frame.columnconfigure(0, weight=1)
+        review_group = QGroupBox("Typed Text Review")
+        review_group.setObjectName("sectionGroup")
+        review_layout = QVBoxLayout(review_group)
+        self.result_typed_box = QTextEdit()
+        self.result_typed_box.setReadOnly(True)
+        self.result_typed_box.setStyleSheet("background-color: #f8fafc; border: 1px solid #ccc;")
+        review_layout.addWidget(self.result_typed_box)
+        card_grid.addWidget(review_group, 1, 1)
 
-        self.result_typed_box = tk.Text(
-            note_frame,
-            wrap="word",
-            font=self.english_font,
-            padx=10,
-            pady=10,
-            relief="solid",
-            borderwidth=1,
-            background="#f8fafc",
-            state="disabled",
-            height=10,
-        )
-        self.result_typed_box.grid(row=0, column=0, sticky="nsew")
+        actions_layout = QHBoxLayout()
+        new_test_btn = QPushButton("New Test")
+        new_test_btn.setObjectName("primaryButton")
+        new_test_btn.clicked.connect(self._start_new_test_from_result)
+        retry_btn = QPushButton("Retry Same Test")
+        retry_btn.clicked.connect(self._retry_current_test)
+        actions_layout.addWidget(new_test_btn)
+        actions_layout.addWidget(retry_btn)
+        actions_layout.addStretch()
+        card_grid.addLayout(actions_layout, 2, 0, 1, 2)
 
-        actions = ttk.Frame(card, style="Card.TFrame")
-        actions.grid(row=2, column=0, columnspan=2, sticky="w", pady=(14, 0))
-        ttk.Button(actions, text="New Test", style="Primary.TButton", command=self._start_new_test_from_result).pack(side="left")
-        ttk.Button(actions, text="Retry Same Test", command=self._retry_current_test).pack(side="left", padx=(10, 0))
+        institute_group = QGroupBox("Institute")
+        institute_group.setObjectName("sectionGroup")
+        inst_layout = QVBoxLayout(institute_group)
+        inst_layout.setAlignment(Qt.AlignCenter)
+        self.result_banner_label = QLabel()
+        self.result_banner_label.setAlignment(Qt.AlignCenter)
+        self._set_banner_image(self.result_banner_label, self.result_banner_pixmap, "(Result banner)")
+        inst_layout.addWidget(self.result_banner_label)
+        inst_layout.addWidget(self._centered_label(COMPANY_NAME, "instituteName"))
+        inst_layout.addWidget(self._centered_label(COMPANY_TAGLINE, "bodyLabel"))
+        inst_layout.addWidget(self._centered_label(f"Call: {COMPANY_PHONE}", "bodyLabel"))
+        inst_layout.addWidget(self._centered_label(COMPANY_BANNER_SIZE, "mutedLabel"))
 
-        ad_frame = ttk.LabelFrame(card, text="Institute", style="Section.TLabelframe", padding=14)
-        ad_frame.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(14, 0))
-        ad_frame.columnconfigure(0, weight=1)
+        inst_actions = QHBoxLayout()
+        inst_actions.setAlignment(Qt.AlignCenter)
+        call_btn = QPushButton("Call Institute")
+        call_btn.setObjectName("primaryButton")
+        call_btn.clicked.connect(self._call_institute)
+        show_btn = QPushButton("Show Number")
+        show_btn.clicked.connect(self._show_phone_number)
+        inst_actions.addWidget(call_btn)
+        inst_actions.addWidget(show_btn)
+        inst_layout.addLayout(inst_actions)
+        card_grid.addWidget(institute_group, 3, 0, 1, 2)
 
-        ad_inner = ttk.Frame(ad_frame, style="Card.TFrame")
-        ad_inner.grid(row=0, column=0, sticky="", pady=(4, 2))
-        ad_inner.columnconfigure(0, weight=1)
-
-        self.result_banner_label = tk.Label(ad_inner, bg="#fffdf8")
-        self.result_banner_label.grid(row=0, column=0, pady=(0, 12))
-        self._set_banner_image(self.result_banner_label, self.result_banner_image, "(Result banner)")
-
-        tk.Label(
-            ad_inner,
-            text=COMPANY_NAME,
-            font=("Segoe UI", 13, "bold"),
-            bg="#fffdf8",
-            fg="#183153",
-        ).grid(row=1, column=0, pady=(0, 4))
-        ttk.Label(ad_inner, text=COMPANY_TAGLINE, style="Body.TLabel", justify="center").grid(row=2, column=0, pady=(0, 3))
-        ttk.Label(ad_inner, text=f"Call: {COMPANY_PHONE}", style="Body.TLabel", justify="center").grid(row=3, column=0, pady=(0, 3))
-        ttk.Label(ad_inner, text=COMPANY_BANNER_SIZE, style="Muted.TLabel", justify="center").grid(row=4, column=0, pady=(0, 8))
-
-        ad_actions = ttk.Frame(ad_inner, style="Card.TFrame")
-        ad_actions.grid(row=5, column=0)
-        ttk.Button(ad_actions, text="Call Institute", style="Primary.TButton", command=self._call_institute).pack(side="left")
-        ttk.Button(ad_actions, text="Show Number", command=self._show_phone_number).pack(side="left", padx=(10, 0))
-
+        scroll_layout.addWidget(card)
+        self.result_scroll_area.setWidget(scroll_content)
+        page_layout.addWidget(self.result_scroll_area)
         return page
 
-    def _show_page(self, page_name: str) -> None:
-        for name, frame in self.pages.items():
-            if name == page_name:
-                frame.pack(fill="both", expand=True)
-            else:
-                frame.pack_forget()
+    # ── helpers ─────────────────────────────────────────────────────
 
-        if page_name == "setup" and self.setup_canvas is not None:
-            self.setup_canvas.yview_moveto(0)
-        if page_name == "result" and hasattr(self, "result_canvas") and self.result_canvas is not None:
-            self.result_canvas.yview_moveto(0)
-
-        titles = {
-            "setup": "1. Test Setup",
-            "test": "2. Typing Test",
-            "result": "3. Result",
-        }
-        self.page_title_text.set(titles[page_name])
+    def _centered_label(self, text: str, object_name: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setObjectName(object_name)
+        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setWordWrap(True)
+        return lbl
 
     def _build_info_card(
-        self,
-        parent: ttk.Frame,
-        title: str,
-        value_var: tk.StringVar,
-        use_mono: bool = False,
-    ) -> ttk.Frame:
-        card = ttk.Frame(parent, style="InfoCard.TFrame", padding=(14, 10))
-        ttk.Label(card, text=title, style="InfoTitle.TLabel").pack(anchor="w")
+        self, title: str, value: str, use_mono: bool = False
+    ) -> tuple[QFrame, QLabel]:
+        frame = QFrame()
+        frame.setObjectName("infoCard")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(14, 10, 14, 10)
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("infoTitle")
+        value_lbl = QLabel(value)
         if use_mono:
-            value = tk.Label(
-                card,
-                textvariable=value_var,
-                font=("Consolas", 16, "bold"),
-                bg="#eef3f8",
-                fg="#17324d",
-            )
-            value.pack(anchor="w", pady=(4, 0))
+            value_lbl.setObjectName("infoValueMono")
         else:
-            ttk.Label(card, textvariable=value_var, style="InfoValue.TLabel").pack(anchor="w", pady=(4, 0))
-        return card
+            value_lbl.setObjectName("infoValue")
+        layout.addWidget(title_lbl)
+        layout.addWidget(value_lbl)
+        return frame, value_lbl
 
-    def _enable_input_methods(self) -> None:
-        try:
-            self.root.tk.call("tk", "useinputmethods", True)
-        except tk.TclError:
-            pass
+    # ── page navigation ────────────────────────────────────────────
 
-    def _setup_win_ime(self, widget: tk.Text) -> None:
-        """Set Windows IME/ISM composition font so ISM recognises the widget as Devanagari-capable."""
-        if not sys.platform.startswith("win"):
-            return
-        if self.language_var.get() not in {"Marathi", "Hindi"}:
-            return
-        try:
-            import ctypes
-            from ctypes import wintypes
+    def _show_page(self, page_name: str) -> None:
+        page_index = {"setup": 0, "test": 1, "result": 2}
+        self.page_stack.setCurrentIndex(page_index[page_name])
 
-            class LOGFONTW(ctypes.Structure):
-                _fields_ = [
-                    ("lfHeight", wintypes.LONG),
-                    ("lfWidth", wintypes.LONG),
-                    ("lfEscapement", wintypes.LONG),
-                    ("lfOrientation", wintypes.LONG),
-                    ("lfWeight", wintypes.LONG),
-                    ("lfItalic", wintypes.BYTE),
-                    ("lfUnderline", wintypes.BYTE),
-                    ("lfStrikeOut", wintypes.BYTE),
-                    ("lfCharSet", wintypes.BYTE),
-                    ("lfOutPrecision", wintypes.BYTE),
-                    ("lfClipPrecision", wintypes.BYTE),
-                    ("lfQuality", wintypes.BYTE),
-                    ("lfPitchAndFamily", wintypes.BYTE),
-                    ("lfFaceName", ctypes.c_wchar * 32),
-                ]
+        if page_name == "setup":
+            self.setup_scroll_area.verticalScrollBar().setValue(0)
+        if page_name == "result" and hasattr(self, "result_scroll_area"):
+            self.result_scroll_area.verticalScrollBar().setValue(0)
 
-            widget.update_idletasks()
-            hwnd = widget.winfo_id()
-            font_name = self.indic_font_family
-            font_size = self.indic_font_size
+        titles = {"setup": "1. Test Setup", "test": "2. Typing Test", "result": "3. Result"}
+        self._set_page_title_text(titles[page_name])
 
-            lf = LOGFONTW()
-            lf.lfHeight = -(font_size + 4)
-            lf.lfWeight = 400
-            lf.lfCharSet = 0
-            lf.lfFaceName = font_name
+    # ── StringVar replacement setters ──────────────────────────────
 
-            gdi32 = ctypes.windll.gdi32
-            user32 = ctypes.windll.user32
-            imm32 = ctypes.windll.imm32
+    def _set_timer_text(self, value: str) -> None:
+        self._timer_text = value
+        if hasattr(self, "setup_time_label"):
+            self.setup_time_label.setText(value)
+        if hasattr(self, "header_timer_value"):
+            self.header_timer_value.setText(value)
 
-            hfont = gdi32.CreateFontIndirectW(ctypes.byref(lf))
-            if hfont:
-                WM_SETFONT = 0x0030
-                user32.SendMessageW(hwnd, WM_SETFONT, hfont, 1)
+    def _set_status_text(self, value: str) -> None:
+        self._status_text = value
+        if hasattr(self, "status_label"):
+            self.status_label.setText(value)
 
-            himc = imm32.ImmGetContext(hwnd)
-            if himc:
-                imm32.ImmSetCompositionFontW(himc, ctypes.byref(lf))
-                imm32.ImmReleaseContext(hwnd, himc)
-        except Exception:
-            pass
+    def _set_page_title_text(self, value: str) -> None:
+        self._page_title_text = value
+        if hasattr(self, "page_title_label"):
+            self.page_title_label.setText(value)
 
-    def _on_input_focus(self, _event=None) -> None:
-        """Re-apply IME font each time the input box receives focus."""
-        if self.language_var.get() in {"Marathi", "Hindi"}:
-            self._setup_win_ime(self.input_box)
+    # ── font resolution ────────────────────────────────────────────
 
-    def _launch_external_editor(self) -> None:
-        """Open Notepad/WordPad for Marathi/Hindi typing since ISM does not work with tkinter."""
-        self._cleanup_external_editor()
-        try:
-            fd, path = tempfile.mkstemp(suffix=".txt", prefix="typing_exam_")
-            os.close(fd)
-            self.external_editor_file = path
-
-            editors = ["notepad.exe", "write.exe"]
-            launched = False
-            for editor in editors:
-                try:
-                    self.external_editor_process = subprocess.Popen([editor, path])
-                    launched = True
-                    break
-                except FileNotFoundError:
-                    continue
-
-            if not launched:
-                self.status_text.set("Could not open Notepad or WordPad.")
-                self.using_external_editor = False
-                return
-
-            self.using_external_editor = True
-            self.input_box.configure(state="normal")
-            self.input_box.delete("1.0", "end")
-            self.input_box.insert(
-                "1.0",
-                "Type in the Notepad window that just opened.\n\n"
-                "When done, save your work in Notepad (Ctrl+S),\n"
-                "then click 'Finish Test' here.\n\n"
-                "Keep this window open to see the passage and timer.",
-            )
-            self.input_box.configure(state="disabled")
-            self.status_text.set("Notepad opened for Marathi/Hindi typing. Type there, save, then finish here.")
-        except Exception as exc:
-            self.status_text.set(f"External editor error: {exc}")
-            self.using_external_editor = False
-
-    def _read_external_editor_text(self) -> str:
-        """Read the typed text from the external editor's temp file."""
-        if not self.external_editor_file or not os.path.exists(self.external_editor_file):
-            return ""
-        for encoding in ("utf-8-sig", "utf-8", "utf-16"):
-            try:
-                with open(self.external_editor_file, "r", encoding=encoding) as fh:
-                    text = fh.read().strip()
-                    if text:
-                        return text
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-        return ""
-
-    def _cleanup_external_editor(self) -> None:
-        """Terminate external editor and remove temp file."""
-        if self.external_editor_process is not None:
-            try:
-                self.external_editor_process.terminate()
-            except Exception:
-                pass
-            self.external_editor_process = None
-        if self.external_editor_file is not None:
-            try:
-                os.unlink(self.external_editor_file)
-            except Exception:
-                pass
-            self.external_editor_file = None
-        self.using_external_editor = False
-
-    def _try_register_local_nirmala(self) -> bool:
+    def _register_local_nirmala(self) -> None:
+        self._local_nirmala_registered = False
+        self._local_nirmala_family = ""
         font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Nirmala UI Regular.ttf")
         if not os.path.exists(font_path):
-            return False
-
-        if sys.platform.startswith("win"):
-            try:
-                import ctypes
-
-                FR_PRIVATE = 0x10
-                added = ctypes.windll.gdi32.AddFontResourceExW(font_path, FR_PRIVATE, 0)
-                return added > 0
-            except Exception:
-                return False
-
-        return False
+            return
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        if font_id >= 0:
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families:
+                self._local_nirmala_family = families[0]
+                self._local_nirmala_registered = True
 
     def _resolve_indic_font(self) -> tuple[str, int]:
-        available_fonts = set(tkfont.families(self.root))
-        preferred_fonts = [
-            "Mangal",
-            "Nirmala UI",
-            "Noto Sans Devanagari",
-            "Noto Serif Devanagari",
-            "Nirmala UI",
-            "Kalimati",
-            "Lohit Devanagari",
+        available_set = set(QFontDatabase.families())
+        preferred = [
+            "Mangal", "Nirmala UI", "Noto Sans Devanagari",
+            "Noto Serif Devanagari", "Kalimati", "Lohit Devanagari",
         ]
-        for family in preferred_fonts:
-            if family in available_fonts:
-                self.font_info_text.set(f"Marathi font in use: {family}")
+        for family in preferred:
+            if family in available_set:
+                self._font_info_text = f"Marathi font in use: {family}"
                 return (family, 18)
 
-        if self.local_nirmala_registered:
-            self.font_info_text.set("Marathi font in use: Nirmala UI (from local font file)")
-            return ("Nirmala UI", 18)
+        if self._local_nirmala_registered:
+            self._font_info_text = (
+                f"Marathi font in use: {self._local_nirmala_family} (from local font file)"
+            )
+            return (self._local_nirmala_family, 18)
 
-        self.font_info_text.set(
-            "No Indic font detected. Install Noto Sans Devanagari on Ubuntu or use Windows with Mangal/Nirmala UI."
+        self._font_info_text = (
+            "No Indic font detected. Install Noto Sans Devanagari on Ubuntu "
+            "or use Windows with Mangal/Nirmala UI."
         )
-        return ("TkDefaultFont", 16)
+        return ("Sans Serif", 16)
 
-    def _apply_style_scale(self) -> None:
-        width = max(self.root.winfo_width(), 900)
-        height = max(self.root.winfo_height(), 620)
-        if width < 980 or height < 690:
-            hero_title = 18
-            hero_body = 9
-            section_label = 10
-            body = 9
-            muted = 8
-            value = 11
-            button = 9
-            info_title = 8
-            info_value = 11
-            page_title = 13
-            status = 9
+    def _get_display_font(self, size: int | None = None) -> QFont:
+        chosen_size = size or self.english_font_size
+        if self._language in {"Marathi", "Hindi"}:
+            return QFont(self.indic_font_family, max(chosen_size, 13))
+        return QFont(self.english_font_family, max(chosen_size, 12))
+
+    def _preview_font_size(self) -> int:
+        width = max(self.width(), 900)
+        return 11 if width < 980 else 13
+
+    def _passage_font_size(self) -> int:
+        width = max(self.width(), 900)
+        height = max(self.height(), 620)
+        content_length = max(len(self.current_passage), 1)
+        size = 15
+        if width < 1100:
+            size -= 1
+        if width < 980:
+            size -= 1
+        if height < 720:
+            size -= 1
+        if height < 660:
+            size -= 1
+        if content_length > 650:
+            size -= 1
+        if content_length > 950:
+            size -= 1
+        return max(size, 12)
+
+    # ── responsive layout ──────────────────────────────────────────
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        if self.resize_timer is None:
+            self.resize_timer = QTimer()
+            self.resize_timer.setSingleShot(True)
+            self.resize_timer.timeout.connect(self._apply_responsive_layout)
+        self.resize_timer.start(120)
+
+    def _apply_responsive_layout(self) -> None:
+        w = max(self.width(), 900)
+        h = max(self.height(), 620)
+        scale = "compact" if (w < 980 or h < 690) else "normal"
+        self._apply_stylesheet(scale)
+        self._apply_header_layout()
+        self._sync_custom_font()
+
+    def _apply_header_layout(self) -> None:
+        if not hasattr(self, "top_bar_layout"):
+            return
+        width = max(self.width(), 900)
+        if width < 980:
+            self.top_bar_layout.setDirection(QBoxLayout.TopToBottom)
         else:
-            hero_title = 21
-            hero_body = 10
-            section_label = 11
-            body = 10
-            muted = 9
-            value = 12
-            button = 10
-            info_title = 9
-            info_value = 13
-            page_title = 15
-            status = 10
+            self.top_bar_layout.setDirection(QBoxLayout.LeftToRight)
 
-        self.style.configure("HeroTitle.TLabel", background="#1f3a5f", foreground="#ffffff", font=("Segoe UI", hero_title, "bold"))
-        self.style.configure("HeroBody.TLabel", background="#1f3a5f", foreground="#d9e4f2", font=("Segoe UI", hero_body))
-        self.style.configure("Section.TLabelframe.Label", background="#fffdf8", foreground="#183153", font=("Segoe UI", section_label, "bold"))
-        self.style.configure("Body.TLabel", background="#fffdf8", foreground="#243447", font=("Segoe UI", body))
-        self.style.configure("Muted.TLabel", background="#fffdf8", foreground="#5f6b7a", font=("Segoe UI", muted))
-        self.style.configure("Value.TLabel", background="#fffdf8", foreground="#10233d", font=("Segoe UI", value, "bold"))
-        self.style.configure("Primary.TButton", font=("Segoe UI", button, "bold"))
-        self.style.configure("InfoTitle.TLabel", background="#eef3f8", foreground="#5a6b7b", font=("Segoe UI", info_title, "bold"))
-        self.style.configure("InfoValue.TLabel", background="#eef3f8", foreground="#17324d", font=("Segoe UI", info_value, "bold"))
+    # ── passage management ─────────────────────────────────────────
 
-        if hasattr(self, "page_title_label"):
-            self.page_title_label.configure(font=("Segoe UI", page_title, "bold"))
-        if hasattr(self, "status_label"):
-            self.status_label.configure(font=("Segoe UI", status))
-
-    def _update_preview_box(self) -> None:
-        font_to_use = self._get_display_font(self._preview_font_size())
-        self.setup_preview_box.configure(state="normal", font=font_to_use)
-        self.setup_preview_box.delete("1.0", "end")
-        self.setup_preview_box.insert("1.0", self._format_passage_for_display(self.current_passage))
-        self.setup_preview_box.configure(state="disabled")
-
-    def _on_profile_changed(self, _event=None) -> None:
-        self.current_profile = PROFILES[self.selected_profile.get()]
+    def _on_profile_changed(self, text: str) -> None:
+        self._selected_profile = text
+        self.current_profile = PROFILES[text]
         self._update_language_mode()
         self._set_time_text()
         self._sync_custom_font()
         self._set_passage_for_current_selection()
-        self.status_text.set("Test configuration updated.")
+        self._set_status_text("Test configuration updated.")
 
-    def _on_practice_language_changed(self, _event=None) -> None:
+    def _on_practice_language_changed(self, text: str) -> None:
         if self.current_profile.duration_minutes is None:
-            self.language_var.set(self.practice_language_var.get())
+            self._practice_language = text
+            self._language = text
             self._sync_custom_font()
             self._set_passage_for_current_selection()
-            self.status_text.set("Practice language changed.")
+            self._set_status_text("Practice language changed.")
 
     def _update_language_mode(self) -> None:
         if self.current_profile.duration_minutes is None:
-            self.language_control.configure(state="readonly")
-            self.language_var.set(self.practice_language_var.get())
+            self.language_control.setEnabled(True)
+            self._language = self._practice_language
         else:
-            self.language_control.configure(state="disabled")
-            self.language_var.set(self.current_profile.language)
-        if hasattr(self, "input_box"):
-            self._configure_input_widget_for_language()
+            self.language_control.setEnabled(False)
+            self._language = self.current_profile.language
 
     def _sync_custom_font(self) -> None:
         if hasattr(self, "passage_box"):
             self._render_passages()
         if hasattr(self, "input_box"):
             self._apply_typing_fonts()
-        if hasattr(self, "result_typed_box") and self.active_result and self.pages["result"].winfo_ismapped():
-            self._show_result_page()
+        if hasattr(self, "result_typed_box") and self.active_result:
+            if self.page_stack.currentIndex() == 2:
+                self._show_result_page()
 
     def _set_time_text(self) -> None:
         if self.current_profile.duration_minutes is None:
-            self.timer_text.set("No Limit")
+            self._set_timer_text("No Limit")
         else:
-            self.timer_text.set(f"{self.current_profile.duration_minutes:02d}:00")
+            self._set_timer_text(f"{self.current_profile.duration_minutes:02d}:00")
 
     def _set_passage_for_current_selection(self) -> None:
-        selected_profile = PROFILES[self.selected_profile.get()]
+        selected_profile = PROFILES[self._selected_profile]
         passage_key = selected_profile.passage_key
 
         if passage_key in self.external_passages and self.external_passages[passage_key]:
@@ -869,147 +790,113 @@ class TypingExamApp:
             self.current_passage = picked["text"]
             self.current_passage_label = picked["label"]
         else:
-            self.current_passage = self._pick_builtin_passage(self.language_var.get())
+            self.current_passage = self._pick_builtin_passage(self._language)
             self.current_passage_label = "Built-in passage"
 
         self._render_passages()
 
     def _render_passages(self) -> None:
-        font_to_use = self._get_display_font(self._passage_font_size())
+        font = self._get_display_font(self._passage_font_size())
         display_text = self._format_passage_for_display(self.current_passage)
 
         if hasattr(self, "passage_box"):
-            self.passage_box.configure(state="normal", font=font_to_use)
-            self.passage_box.delete("1.0", "end")
-            self.passage_box.insert("1.0", display_text)
-            self.passage_box.configure(state="disabled")
-
-            # Add breathing room so passages are easier to read sentence by sentence.
-            self.passage_box.configure(spacing1=4, spacing2=3, spacing3=6, tabs=("2c",))
+            self.passage_box.setFont(font)
+            self.passage_box.setPlainText(display_text)
 
         self._update_preview_box()
 
+    def _update_preview_box(self) -> None:
+        if not hasattr(self, "setup_preview_box"):
+            return
+        font = self._get_display_font(self._preview_font_size())
+        self.setup_preview_box.setFont(font)
+        self.setup_preview_box.setPlainText(
+            self._format_passage_for_display(self.current_passage)
+        )
+
     def _refresh_passage(self) -> None:
         if self.test_running:
-            messagebox.showinfo("Test Running", "Finish or reset the current test first.")
+            QMessageBox.information(self, "Test Running", "Finish or reset the current test first.")
             return
-
         self._set_passage_for_current_selection()
-        self.status_text.set(f"Passage ready. Source: {self.current_passage_label}")
+        self._set_status_text(f"Passage ready. Source: {self.current_passage_label}")
+
+    def _apply_typing_fonts(self) -> None:
+        font = self._get_display_font(self._passage_font_size())
+        self.passage_box.setFont(font)
+        self.input_box.setFont(font)
+        self.result_typed_box.setFont(font)
+
+    # ── test flow ──────────────────────────────────────────────────
 
     def start_test(self) -> None:
         if self.test_running:
             return
 
-        self.current_profile = PROFILES[self.selected_profile.get()]
+        self.current_profile = PROFILES[self._selected_profile]
         self._update_language_mode()
         self._sync_custom_font()
         self._set_passage_for_current_selection()
 
-        candidate_name = self.candidate_name_var.get().strip()
+        candidate_name = self.candidate_name_input.text().strip()
         if not candidate_name:
-            messagebox.showwarning("Candidate Name", "Please enter candidate name.")
+            QMessageBox.warning(self, "Candidate Name", "Please enter candidate name.")
             return
 
         if not self.current_passage.strip():
-            messagebox.showwarning("No Passage", "Please load a passage before starting.")
+            QMessageBox.warning(self, "No Passage", "Please load a passage before starting.")
             return
 
-        self.input_box.delete("1.0", "end")
-        self._configure_input_widget_for_language()
+        self.input_box.clear()
         self._apply_typing_fonts()
+
+        if hasattr(self, "header_exam_value"):
+            self.header_exam_value.setText(self._selected_profile)
+        if hasattr(self, "header_language_value"):
+            self.header_language_value.setText(self._language)
+
         self.test_running = True
         self.start_time = time.time()
         self._set_time_text()
-        self.status_text.set("Test is running.")
+        self._set_status_text("Test is running.")
         self._show_page("test")
-
-        if sys.platform.startswith("win") and self.language_var.get() in {"Marathi", "Hindi"}:
-            self._launch_external_editor()
-        else:
-            self.input_box.focus_set()
+        self.input_box.setFocus()
 
         if self.current_profile.duration_minutes is not None:
             self._schedule_timer()
 
-    def _apply_typing_fonts(self) -> None:
-        font_to_use = self._get_display_font(self._passage_font_size())
-        self.passage_box.configure(font=font_to_use)
-        self.input_box.configure(font=font_to_use)
-        self.result_typed_box.configure(font=font_to_use)
-        self.input_box.configure(spacing1=4, spacing2=3, spacing3=6, tabs=("2c",))
-        self.result_typed_box.configure(spacing1=4, spacing2=3, spacing3=6, tabs=("2c",))
-
-    def _configure_input_widget_for_language(self) -> None:
-        if not hasattr(self, "input_box"):
-            return
-
-        common_options = {
-            "wrap": "word",
-            "exportselection": False,
-            "insertwidth": 2,
-            "takefocus": True,
-        }
-
-        if sys.platform.startswith("win") and self.language_var.get() in {"Marathi", "Hindi"}:
-            self.input_box.configure(
-                undo=False,
-                autoseparators=False,
-                maxundo=0,
-                **common_options,
-            )
-            self._setup_win_ime(self.input_box)
-            self.status_text.set("Windows Marathi/Hindi compatibility mode enabled for typing.")
-            return
-
-        self.input_box.configure(
-            undo=True,
-            autoseparators=True,
-            maxundo=-1,
-            **common_options,
-        )
-
     def _schedule_timer(self) -> None:
+        if self.timer is not None:
+            self.timer.stop()
+        self.timer = QTimer()
+        self.timer.setInterval(250)
+        self.timer.timeout.connect(self._tick_timer)
+        self.timer.start()
+
+    def _tick_timer(self) -> None:
         if not self.test_running or self.current_profile.duration_minutes is None:
+            if self.timer is not None:
+                self.timer.stop()
             return
 
         total_seconds = self.current_profile.duration_minutes * 60
         elapsed_seconds = int(time.time() - self.start_time)
         remaining = max(0, total_seconds - elapsed_seconds)
         minutes, seconds = divmod(remaining, 60)
-        self.timer_text.set(f"{minutes:02d}:{seconds:02d}")
+        self._set_timer_text(f"{minutes:02d}:{seconds:02d}")
 
         if remaining == 0:
+            self.timer.stop()
             self.finish_test(time_up=True)
-            return
-
-        self.timer_job = self.root.after(250, self._schedule_timer)
 
     def finish_test(self, time_up: bool = False) -> None:
         if not self.test_running:
-            self.status_text.set("No running test to finish.")
+            self._set_status_text("No running test to finish.")
             return
 
-        if self.timer_job is not None:
-            self.root.after_cancel(self.timer_job)
-            self.timer_job = None
-
-        if self.using_external_editor:
-            if time_up:
-                messagebox.showinfo(
-                    "Time Up",
-                    "Time is over!\nPlease save your work in Notepad (Ctrl+S) and click OK.",
-                )
-            else:
-                messagebox.showinfo(
-                    "Save First",
-                    "Please save your work in Notepad (Ctrl+S) and click OK.",
-                )
-            typed_text = self._read_external_editor_text()
-            self.input_box.configure(state="normal")
-            self.input_box.delete("1.0", "end")
-            self.input_box.insert("1.0", typed_text)
-            self._cleanup_external_editor()
+        if self.timer is not None:
+            self.timer.stop()
+            self.timer = None
 
         self.test_running = False
         elapsed = max(time.time() - self.start_time, 1)
@@ -1017,37 +904,40 @@ class TypingExamApp:
         self._show_result_page()
 
         if time_up:
-            self.status_text.set("Time is over. Result calculated.")
+            QMessageBox.information(self, "Time Up", "Time is over!")
+            self._set_status_text("Time is over. Result calculated.")
         else:
-            self.status_text.set("Test finished. Result calculated.")
+            self._set_status_text("Test finished. Result calculated.")
 
     def reset_test(self) -> None:
-        if self.timer_job is not None:
-            self.root.after_cancel(self.timer_job)
-            self.timer_job = None
+        if self.timer is not None:
+            self.timer.stop()
+            self.timer = None
 
-        self._cleanup_external_editor()
         self.test_running = False
-        self.input_box.configure(state="normal")
-        self.input_box.delete("1.0", "end")
+        self.input_box.clear()
         self._set_time_text()
-        self.status_text.set("Current test reset.")
+        self._set_status_text("Current test reset.")
 
     def _back_to_setup(self) -> None:
         if self.test_running:
-            confirmed = messagebox.askyesno(
+            reply = QMessageBox.question(
+                self,
                 "Leave Test",
                 "The current test is running. Do you want to stop it and return to setup?",
+                QMessageBox.Yes | QMessageBox.No,
             )
-            if not confirmed:
+            if reply != QMessageBox.Yes:
                 return
             self.reset_test()
         self._show_page("setup")
-        self.status_text.set("Back on setup page.")
+        self._set_status_text("Back on setup page.")
+
+    # ── results ────────────────────────────────────────────────────
 
     def _calculate_results(self, elapsed_seconds: float) -> None:
         source_words = self._tokenize(self.current_passage)
-        typed_text = self.input_box.get("1.0", "end").strip()
+        typed_text = self.input_box.toPlainText().strip()
         typed_words = self._tokenize(typed_text)
 
         matched_words = sum(
@@ -1068,9 +958,9 @@ class TypingExamApp:
         result_text = self._calculate_result(marks, mistakes)
 
         self.active_result = {
-            "Candidate Name": self.candidate_name_var.get().strip(),
+            "Candidate Name": self.candidate_name_input.text().strip(),
             "Exam Type": self.current_profile.name,
-            "Language": self.language_var.get(),
+            "Language": self._language,
             "Passage Source": self.current_passage_label,
             "Elapsed Time": self._format_elapsed(elapsed_seconds),
             "Total Typed Words": str(total_typed),
@@ -1087,83 +977,25 @@ class TypingExamApp:
     def _show_result_page(self) -> None:
         self._show_page("result")
         for label, widget in self.result_labels.items():
-            widget.configure(text=self.active_result.get(label, "-"))
+            widget.setText(self.active_result.get(label, "-"))
 
-        font_to_use = self._get_display_font(self._passage_font_size())
-        self.result_typed_box.configure(state="normal", font=font_to_use)
-        self.result_typed_box.delete("1.0", "end")
-        self.result_typed_box.insert("1.0", self.active_result.get("Typed Text", ""))
-        self.result_typed_box.configure(state="disabled")
+        font = self._get_display_font(self._passage_font_size())
+        self.result_typed_box.setFont(font)
+        self.result_typed_box.setPlainText(self.active_result.get("Typed Text", ""))
 
-    def _get_display_font(self, size: int | None = None) -> tuple[str, int]:
-        chosen_size = size or self.english_font_size
-        if self.language_var.get() in {"Marathi", "Hindi"}:
-            return (self.indic_font_family, max(chosen_size, 13))
-        return (self.english_font_family, max(chosen_size, 12))
+    # ── input monitoring ───────────────────────────────────────────
 
-    def _preview_font_size(self) -> int:
-        width = max(self.root.winfo_width(), 900)
-        if width < 980:
-            return 11
-        return 13
-
-    def _passage_font_size(self) -> int:
-        width = max(self.root.winfo_width(), 900)
-        height = max(self.root.winfo_height(), 620)
-        content_length = max(len(self.current_passage), 1)
-        size = 15
-        if width < 1100:
-            size -= 1
-        if width < 980:
-            size -= 1
-        if height < 720:
-            size -= 1
-        if height < 660:
-            size -= 1
-        if content_length > 650:
-            size -= 1
-        if content_length > 950:
-            size -= 1
-        return max(size, 12)
-
-    def _on_window_resized(self, event) -> None:
-        if event.widget is not self.root:
+    def _on_input_text_changed(self) -> None:
+        if self._language not in {"Marathi", "Hindi"}:
             return
-        if self.resize_job is not None:
-            self.root.after_cancel(self.resize_job)
-        self.resize_job = self.root.after(120, self._apply_responsive_layout)
-
-    def _apply_responsive_layout(self) -> None:
-        self.resize_job = None
-        self._apply_style_scale()
-        self._apply_header_layout()
-        self._sync_custom_font()
-
-    def _apply_header_layout(self) -> None:
-        if self.top_bar is None:
-            return
-        width = max(self.root.winfo_width(), 900)
-        compact = width < 980
-        if compact:
-            self.top_bar.columnconfigure((0, 1, 2), weight=0)
-            self.top_bar.columnconfigure(0, weight=1)
-            self.header_exam_box.grid_configure(row=0, column=0, padx=0, pady=(0, 8))
-            self.header_language_box.grid_configure(row=1, column=0, padx=0, pady=(0, 8))
-            self.header_timer_box.grid_configure(row=2, column=0, padx=0, pady=0)
-        else:
-            self.top_bar.columnconfigure((0, 1, 2), weight=1)
-            self.header_exam_box.grid_configure(row=0, column=0, padx=(0, 8), pady=0)
-            self.header_language_box.grid_configure(row=0, column=1, padx=4, pady=0)
-            self.header_timer_box.grid_configure(row=0, column=2, padx=(8, 0), pady=0)
-
-    def _on_input_key_release(self, _event=None) -> None:
-        if self.language_var.get() not in {"Marathi", "Hindi"}:
-            return
-        typed_text = self.input_box.get("1.0", "end-1c")
+        typed_text = self.input_box.toPlainText()
         if typed_text and set(typed_text) == {"?"}:
-            self.status_text.set(
-                "ISM is sending '?' — switch ISM to Unicode mode, or use Windows Marathi/Hindi keyboard (Settings > Language) instead of legacy ISM."
+            self._set_status_text(
+                "ISM is sending '?' -- switch ISM to Unicode mode, or use Windows "
+                "Marathi/Hindi keyboard (Settings > Language) instead of legacy ISM."
             )
+
+    # ── business logic (unchanged) ─────────────────────────────────
 
     def _pick_builtin_passage(self, language: str) -> str:
         if language == "Marathi":
@@ -1257,47 +1089,35 @@ class TypingExamApp:
 
         return "\n".join(paragraphs).strip("\n")
 
-    def _load_png(self, file_name: str) -> tk.PhotoImage | None:
+    # ── image loading ──────────────────────────────────────────────
+
+    def _load_png(self, file_name: str) -> QPixmap | None:
         image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), file_name)
         if not os.path.exists(image_path):
             return None
-        try:
-            return tk.PhotoImage(file=image_path)
-        except tk.TclError:
+        pixmap = QPixmap(image_path)
+        if pixmap.isNull():
             return None
+        return pixmap
 
-    def _set_banner_image(
-        self,
-        label: tk.Label,
-        image: tk.PhotoImage | None,
-        fallback_text: str,
-    ) -> None:
-        if image is not None:
-            label.configure(
-                image=image,
-                text="",
-                borderwidth=1,
-                relief="solid",
-                padx=6,
-                pady=6,
-                bg="#fffdf8",
+    def _set_banner_image(self, label: QLabel, pixmap: QPixmap | None, fallback_text: str) -> None:
+        if pixmap is not None:
+            label.setPixmap(pixmap)
+            label.setStyleSheet(
+                "border: 1px solid #ccc; padding: 6px; background-color: #fffdf8;"
             )
-            label.image = image
         else:
-            label.configure(
-                image="",
-                text=fallback_text,
-                font=("Segoe UI", 11, "bold"),
-                fg="#183153",
-                padx=20,
-                pady=20,
-                borderwidth=1,
-                relief="solid",
-                bg="#fffdf8",
+            label.setText(fallback_text)
+            label.setStyleSheet(
+                "font-family: 'Segoe UI'; font-size: 11pt; font-weight: bold; "
+                "color: #183153; padding: 20px; border: 1px solid #ccc; "
+                "background-color: #fffdf8;"
             )
+
+    # ── institute actions ──────────────────────────────────────────
 
     def _show_phone_number(self) -> None:
-        messagebox.showinfo("Institute Contact", f"{COMPANY_NAME}\nCall: {COMPANY_PHONE}")
+        QMessageBox.information(self, "Institute Contact", f"{COMPANY_NAME}\nCall: {COMPANY_PHONE}")
 
     def _call_institute(self) -> None:
         try:
@@ -1305,15 +1125,19 @@ class TypingExamApp:
         except Exception:
             self._show_phone_number()
 
+    # ── navigation helpers ─────────────────────────────────────────
+
     def _start_new_test_from_result(self) -> None:
-        self.input_box.delete("1.0", "end")
+        self.input_box.clear()
         self._show_page("setup")
-        self.status_text.set("Ready for a new test.")
+        self._set_status_text("Ready for a new test.")
 
     def _retry_current_test(self) -> None:
-        self.input_box.delete("1.0", "end")
+        self.input_box.clear()
         self._show_page("test")
         self.start_test()
+
+    # ── static helpers ─────────────────────────────────────────────
 
     @staticmethod
     def _tokenize(text: str) -> list[str]:
@@ -1328,9 +1152,10 @@ class TypingExamApp:
 
 
 def main() -> None:
-    root = tk.Tk()
-    TypingExamApp(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    window = TypingExamApp()
+    window.show()
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
