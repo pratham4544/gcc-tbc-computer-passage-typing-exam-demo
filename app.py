@@ -1,6 +1,8 @@
 import os
 import random
+import subprocess
 import sys
+import tempfile
 import time
 import tkinter as tk
 import webbrowser
@@ -110,6 +112,9 @@ class TypingExamApp:
         self.setup_scroll_body: ttk.Frame | None = None
         self.split_frame: ttk.Frame | None = None
         self.top_bar: ttk.Frame | None = None
+        self.external_editor_file: str | None = None
+        self.external_editor_process: subprocess.Popen | None = None
+        self.using_external_editor = False
 
         self.english_font_family = "Segoe UI"
         self.english_font_size = 16
@@ -655,6 +660,75 @@ class TypingExamApp:
         if self.language_var.get() in {"Marathi", "Hindi"}:
             self._setup_win_ime(self.input_box)
 
+    def _launch_external_editor(self) -> None:
+        """Open Notepad/WordPad for Marathi/Hindi typing since ISM does not work with tkinter."""
+        self._cleanup_external_editor()
+        try:
+            fd, path = tempfile.mkstemp(suffix=".txt", prefix="typing_exam_")
+            os.close(fd)
+            self.external_editor_file = path
+
+            editors = ["notepad.exe", "write.exe"]
+            launched = False
+            for editor in editors:
+                try:
+                    self.external_editor_process = subprocess.Popen([editor, path])
+                    launched = True
+                    break
+                except FileNotFoundError:
+                    continue
+
+            if not launched:
+                self.status_text.set("Could not open Notepad or WordPad.")
+                self.using_external_editor = False
+                return
+
+            self.using_external_editor = True
+            self.input_box.configure(state="normal")
+            self.input_box.delete("1.0", "end")
+            self.input_box.insert(
+                "1.0",
+                "Type in the Notepad window that just opened.\n\n"
+                "When done, save your work in Notepad (Ctrl+S),\n"
+                "then click 'Finish Test' here.\n\n"
+                "Keep this window open to see the passage and timer.",
+            )
+            self.input_box.configure(state="disabled")
+            self.status_text.set("Notepad opened for Marathi/Hindi typing. Type there, save, then finish here.")
+        except Exception as exc:
+            self.status_text.set(f"External editor error: {exc}")
+            self.using_external_editor = False
+
+    def _read_external_editor_text(self) -> str:
+        """Read the typed text from the external editor's temp file."""
+        if not self.external_editor_file or not os.path.exists(self.external_editor_file):
+            return ""
+        for encoding in ("utf-8-sig", "utf-8", "utf-16"):
+            try:
+                with open(self.external_editor_file, "r", encoding=encoding) as fh:
+                    text = fh.read().strip()
+                    if text:
+                        return text
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        return ""
+
+    def _cleanup_external_editor(self) -> None:
+        """Terminate external editor and remove temp file."""
+        if self.external_editor_process is not None:
+            try:
+                self.external_editor_process.terminate()
+            except Exception:
+                pass
+            self.external_editor_process = None
+        if self.external_editor_file is not None:
+            try:
+                os.unlink(self.external_editor_file)
+            except Exception:
+                pass
+            self.external_editor_file = None
+        self.using_external_editor = False
+
     def _try_register_local_nirmala(self) -> bool:
         font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Nirmala UI Regular.ttf")
         if not os.path.exists(font_path):
@@ -849,7 +923,11 @@ class TypingExamApp:
         self._set_time_text()
         self.status_text.set("Test is running.")
         self._show_page("test")
-        self.input_box.focus_set()
+
+        if sys.platform.startswith("win") and self.language_var.get() in {"Marathi", "Hindi"}:
+            self._launch_external_editor()
+        else:
+            self.input_box.focus_set()
 
         if self.current_profile.duration_minutes is not None:
             self._schedule_timer()
@@ -916,6 +994,23 @@ class TypingExamApp:
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
 
+        if self.using_external_editor:
+            if time_up:
+                messagebox.showinfo(
+                    "Time Up",
+                    "Time is over!\nPlease save your work in Notepad (Ctrl+S) and click OK.",
+                )
+            else:
+                messagebox.showinfo(
+                    "Save First",
+                    "Please save your work in Notepad (Ctrl+S) and click OK.",
+                )
+            typed_text = self._read_external_editor_text()
+            self.input_box.configure(state="normal")
+            self.input_box.delete("1.0", "end")
+            self.input_box.insert("1.0", typed_text)
+            self._cleanup_external_editor()
+
         self.test_running = False
         elapsed = max(time.time() - self.start_time, 1)
         self._calculate_results(elapsed)
@@ -923,7 +1018,6 @@ class TypingExamApp:
 
         if time_up:
             self.status_text.set("Time is over. Result calculated.")
-            messagebox.showinfo("Test Complete", "The timed test has ended.")
         else:
             self.status_text.set("Test finished. Result calculated.")
 
@@ -932,7 +1026,9 @@ class TypingExamApp:
             self.root.after_cancel(self.timer_job)
             self.timer_job = None
 
+        self._cleanup_external_editor()
         self.test_running = False
+        self.input_box.configure(state="normal")
         self.input_box.delete("1.0", "end")
         self._set_time_text()
         self.status_text.set("Current test reset.")
