@@ -84,6 +84,7 @@ class TypingExamApp:
         self.root.title("Typing Exam Practice")
         self._configure_window()
         self.root.configure(bg="#f3efe7")
+        self._enable_input_methods()
 
         self.selected_profile = tk.StringVar(value="English 30 WPM")
         self.candidate_name_var = tk.StringVar()
@@ -101,20 +102,28 @@ class TypingExamApp:
         self.test_running = False
         self.start_time = 0.0
         self.timer_job: str | None = None
+        self.resize_job: str | None = None
         self.local_nirmala_registered = self._try_register_local_nirmala()
         self.setup_banner_image = self._load_png("img1.png")
         self.result_banner_image = self._load_png("img2.png")
         self.setup_canvas: tk.Canvas | None = None
         self.setup_scroll_body: ttk.Frame | None = None
+        self.split_frame: ttk.Frame | None = None
+        self.top_bar: ttk.Frame | None = None
 
-        self.english_font = ("Segoe UI", 16)
-        self.indic_font = self._resolve_indic_font()
+        self.english_font_family = "Segoe UI"
+        self.english_font_size = 16
+        self.indic_font_family, self.indic_font_size = self._resolve_indic_font()
+        self.english_font = (self.english_font_family, self.english_font_size)
+        self.indic_font = (self.indic_font_family, self.indic_font_size)
         self.external_passages = self._load_external_docx_passages()
 
         self._configure_styles()
         self._build_ui()
         self._update_language_mode()
         self._set_passage_for_current_selection()
+        self.root.bind("<Configure>", self._on_window_resized)
+        self.root.after(50, self._apply_responsive_layout)
         self._show_page("setup")
 
     def _configure_window(self) -> None:
@@ -128,25 +137,17 @@ class TypingExamApp:
         self.root.minsize(900, 620)
 
     def _configure_styles(self) -> None:
-        style = ttk.Style()
-        available_themes = style.theme_names()
+        self.style = ttk.Style()
+        available_themes = self.style.theme_names()
         if "clam" in available_themes:
-            style.theme_use("clam")
+            self.style.theme_use("clam")
 
-        style.configure("App.TFrame", background="#f3efe7")
-        style.configure("Card.TFrame", background="#fffdf8")
-        style.configure("Hero.TFrame", background="#1f3a5f")
-        style.configure("HeroTitle.TLabel", background="#1f3a5f", foreground="#ffffff", font=("Segoe UI", 21, "bold"))
-        style.configure("HeroBody.TLabel", background="#1f3a5f", foreground="#d9e4f2", font=("Segoe UI", 10))
-        style.configure("Section.TLabelframe", background="#fffdf8", borderwidth=1)
-        style.configure("Section.TLabelframe.Label", background="#fffdf8", foreground="#183153", font=("Segoe UI", 11, "bold"))
-        style.configure("Body.TLabel", background="#fffdf8", foreground="#243447", font=("Segoe UI", 10))
-        style.configure("Muted.TLabel", background="#fffdf8", foreground="#5f6b7a", font=("Segoe UI", 9))
-        style.configure("Value.TLabel", background="#fffdf8", foreground="#10233d", font=("Segoe UI", 12, "bold"))
-        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"))
-        style.configure("InfoCard.TFrame", background="#eef3f8")
-        style.configure("InfoTitle.TLabel", background="#eef3f8", foreground="#5a6b7b", font=("Segoe UI", 9, "bold"))
-        style.configure("InfoValue.TLabel", background="#eef3f8", foreground="#17324d", font=("Segoe UI", 13, "bold"))
+        self.style.configure("App.TFrame", background="#f3efe7")
+        self.style.configure("Card.TFrame", background="#fffdf8")
+        self.style.configure("Hero.TFrame", background="#1f3a5f")
+        self.style.configure("Section.TLabelframe", background="#fffdf8", borderwidth=1)
+        self.style.configure("InfoCard.TFrame", background="#eef3f8")
+        self._apply_style_scale()
 
     def _build_ui(self) -> None:
         shell = ttk.Frame(self.root, style="App.TFrame", padding=18)
@@ -163,14 +164,16 @@ class TypingExamApp:
 
         nav = ttk.Frame(shell, style="App.TFrame", padding=(0, 14, 0, 8))
         nav.pack(fill="x")
-        tk.Label(
+        self.page_title_label = tk.Label(
             nav,
             textvariable=self.page_title_text,
             font=("Segoe UI", 15, "bold"),
             bg="#f3efe7",
             fg="#183153",
-        ).pack(side="left")
-        tk.Label(nav, textvariable=self.status_text, bg="#f3efe7", fg="#52606d").pack(side="right")
+        )
+        self.page_title_label.pack(side="left")
+        self.status_label = tk.Label(nav, textvariable=self.status_text, bg="#f3efe7", fg="#52606d")
+        self.status_label.pack(side="right")
 
         self.page_host = ttk.Frame(shell, style="App.TFrame")
         self.page_host.pack(fill="both", expand=True)
@@ -346,6 +349,7 @@ class TypingExamApp:
         top_bar = ttk.Frame(card, style="Card.TFrame")
         top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 14))
         top_bar.columnconfigure((0, 1, 2), weight=1)
+        self.top_bar = top_bar
 
         self.header_exam_box = self._build_info_card(top_bar, "Exam Type", self.selected_profile)
         self.header_exam_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
@@ -359,6 +363,7 @@ class TypingExamApp:
         split.columnconfigure(0, weight=1)
         split.columnconfigure(1, weight=1)
         split.rowconfigure(0, weight=1)
+        self.split_frame = split
 
         passage_card = ttk.LabelFrame(split, text="Passage", style="Section.TLabelframe", padding=12)
         passage_card.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
@@ -397,6 +402,7 @@ class TypingExamApp:
             width=46,
         )
         self.input_box.grid(row=0, column=0, sticky="nsew")
+        self.input_box.bind("<KeyRelease>", self._on_input_key_release)
 
         bottom_bar = ttk.Frame(card, style="Card.TFrame")
         bottom_bar.grid(row=2, column=0, sticky="ew", pady=(14, 0))
@@ -541,6 +547,12 @@ class TypingExamApp:
             ttk.Label(card, textvariable=value_var, style="InfoValue.TLabel").pack(anchor="w", pady=(4, 0))
         return card
 
+    def _enable_input_methods(self) -> None:
+        try:
+            self.root.tk.call("tk", "useinputmethods", True)
+        except tk.TclError:
+            pass
+
     def _try_register_local_nirmala(self) -> bool:
         font_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Nirmala UI Regular.ttf")
         if not os.path.exists(font_path):
@@ -583,8 +595,51 @@ class TypingExamApp:
         )
         return ("TkDefaultFont", 16)
 
+    def _apply_style_scale(self) -> None:
+        width = max(self.root.winfo_width(), 900)
+        height = max(self.root.winfo_height(), 620)
+        if width < 980 or height < 690:
+            hero_title = 18
+            hero_body = 9
+            section_label = 10
+            body = 9
+            muted = 8
+            value = 11
+            button = 9
+            info_title = 8
+            info_value = 11
+            page_title = 13
+            status = 9
+        else:
+            hero_title = 21
+            hero_body = 10
+            section_label = 11
+            body = 10
+            muted = 9
+            value = 12
+            button = 10
+            info_title = 9
+            info_value = 13
+            page_title = 15
+            status = 10
+
+        self.style.configure("HeroTitle.TLabel", background="#1f3a5f", foreground="#ffffff", font=("Segoe UI", hero_title, "bold"))
+        self.style.configure("HeroBody.TLabel", background="#1f3a5f", foreground="#d9e4f2", font=("Segoe UI", hero_body))
+        self.style.configure("Section.TLabelframe.Label", background="#fffdf8", foreground="#183153", font=("Segoe UI", section_label, "bold"))
+        self.style.configure("Body.TLabel", background="#fffdf8", foreground="#243447", font=("Segoe UI", body))
+        self.style.configure("Muted.TLabel", background="#fffdf8", foreground="#5f6b7a", font=("Segoe UI", muted))
+        self.style.configure("Value.TLabel", background="#fffdf8", foreground="#10233d", font=("Segoe UI", value, "bold"))
+        self.style.configure("Primary.TButton", font=("Segoe UI", button, "bold"))
+        self.style.configure("InfoTitle.TLabel", background="#eef3f8", foreground="#5a6b7b", font=("Segoe UI", info_title, "bold"))
+        self.style.configure("InfoValue.TLabel", background="#eef3f8", foreground="#17324d", font=("Segoe UI", info_value, "bold"))
+
+        if hasattr(self, "page_title_label"):
+            self.page_title_label.configure(font=("Segoe UI", page_title, "bold"))
+        if hasattr(self, "status_label"):
+            self.status_label.configure(font=("Segoe UI", status))
+
     def _update_preview_box(self) -> None:
-        font_to_use = self.indic_font if self.language_var.get() in {"Marathi", "Hindi"} else self.english_font
+        font_to_use = self._get_display_font(self._preview_font_size())
         self.setup_preview_box.configure(state="normal", font=font_to_use)
         self.setup_preview_box.delete("1.0", "end")
         self.setup_preview_box.insert("1.0", self._format_passage_for_display(self.current_passage))
@@ -612,9 +667,16 @@ class TypingExamApp:
         else:
             self.language_control.configure(state="disabled")
             self.language_var.set(self.current_profile.language)
+        if hasattr(self, "input_box"):
+            self._configure_input_widget_for_language()
 
     def _sync_custom_font(self) -> None:
-        return
+        if hasattr(self, "passage_box"):
+            self._render_passages()
+        if hasattr(self, "input_box"):
+            self._apply_typing_fonts()
+        if hasattr(self, "result_typed_box") and self.active_result and self.pages["result"].winfo_ismapped():
+            self._show_result_page()
 
     def _set_time_text(self) -> None:
         if self.current_profile.duration_minutes is None:
@@ -637,7 +699,7 @@ class TypingExamApp:
         self._render_passages()
 
     def _render_passages(self) -> None:
-        font_to_use = self.indic_font if self.language_var.get() in {"Marathi", "Hindi"} else self.english_font
+        font_to_use = self._get_display_font(self._passage_font_size())
         display_text = self._format_passage_for_display(self.current_passage)
 
         if hasattr(self, "passage_box"):
@@ -678,6 +740,7 @@ class TypingExamApp:
             return
 
         self.input_box.delete("1.0", "end")
+        self._configure_input_widget_for_language()
         self._apply_typing_fonts()
         self.test_running = True
         self.start_time = time.time()
@@ -690,12 +753,40 @@ class TypingExamApp:
             self._schedule_timer()
 
     def _apply_typing_fonts(self) -> None:
-        font_to_use = self.indic_font if self.language_var.get() in {"Marathi", "Hindi"} else self.english_font
+        font_to_use = self._get_display_font(self._passage_font_size())
         self.passage_box.configure(font=font_to_use)
         self.input_box.configure(font=font_to_use)
         self.result_typed_box.configure(font=font_to_use)
         self.input_box.configure(spacing1=4, spacing2=3, spacing3=6, tabs=("2c",))
         self.result_typed_box.configure(spacing1=4, spacing2=3, spacing3=6, tabs=("2c",))
+
+    def _configure_input_widget_for_language(self) -> None:
+        if not hasattr(self, "input_box"):
+            return
+
+        common_options = {
+            "wrap": "word",
+            "exportselection": False,
+            "insertwidth": 2,
+            "takefocus": True,
+        }
+
+        if sys.platform.startswith("win") and self.language_var.get() in {"Marathi", "Hindi"}:
+            self.input_box.configure(
+                undo=False,
+                autoseparators=False,
+                maxundo=0,
+                **common_options,
+            )
+            self.status_text.set("Windows Marathi/Hindi compatibility mode enabled for typing.")
+            return
+
+        self.input_box.configure(
+            undo=True,
+            autoseparators=True,
+            maxundo=-1,
+            **common_options,
+        )
 
     def _schedule_timer(self) -> None:
         if not self.test_running or self.current_profile.duration_minutes is None:
@@ -799,11 +890,81 @@ class TypingExamApp:
         for label, widget in self.result_labels.items():
             widget.configure(text=self.active_result.get(label, "-"))
 
-        font_to_use = self.indic_font if self.language_var.get() in {"Marathi", "Hindi"} else self.english_font
+        font_to_use = self._get_display_font(self._passage_font_size())
         self.result_typed_box.configure(state="normal", font=font_to_use)
         self.result_typed_box.delete("1.0", "end")
         self.result_typed_box.insert("1.0", self.active_result.get("Typed Text", ""))
         self.result_typed_box.configure(state="disabled")
+
+    def _get_display_font(self, size: int | None = None) -> tuple[str, int]:
+        chosen_size = size or self.english_font_size
+        if self.language_var.get() in {"Marathi", "Hindi"}:
+            return (self.indic_font_family, max(chosen_size, 13))
+        return (self.english_font_family, max(chosen_size, 12))
+
+    def _preview_font_size(self) -> int:
+        width = max(self.root.winfo_width(), 900)
+        if width < 980:
+            return 13
+        return 15
+
+    def _passage_font_size(self) -> int:
+        width = max(self.root.winfo_width(), 900)
+        height = max(self.root.winfo_height(), 620)
+        content_length = max(len(self.current_passage), 1)
+        size = 16
+        if width < 1100:
+            size -= 1
+        if width < 980:
+            size -= 1
+        if height < 720:
+            size -= 1
+        if height < 660:
+            size -= 1
+        if content_length > 650:
+            size -= 1
+        if content_length > 950:
+            size -= 1
+        return max(size, 12)
+
+    def _on_window_resized(self, event) -> None:
+        if event.widget is not self.root:
+            return
+        if self.resize_job is not None:
+            self.root.after_cancel(self.resize_job)
+        self.resize_job = self.root.after(120, self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self) -> None:
+        self.resize_job = None
+        self._apply_style_scale()
+        self._apply_header_layout()
+        self._sync_custom_font()
+
+    def _apply_header_layout(self) -> None:
+        if self.top_bar is None:
+            return
+        width = max(self.root.winfo_width(), 900)
+        compact = width < 980
+        if compact:
+            self.top_bar.columnconfigure((0, 1, 2), weight=0)
+            self.top_bar.columnconfigure(0, weight=1)
+            self.header_exam_box.grid_configure(row=0, column=0, padx=0, pady=(0, 8))
+            self.header_language_box.grid_configure(row=1, column=0, padx=0, pady=(0, 8))
+            self.header_timer_box.grid_configure(row=2, column=0, padx=0, pady=0)
+        else:
+            self.top_bar.columnconfigure((0, 1, 2), weight=1)
+            self.header_exam_box.grid_configure(row=0, column=0, padx=(0, 8), pady=0)
+            self.header_language_box.grid_configure(row=0, column=1, padx=4, pady=0)
+            self.header_timer_box.grid_configure(row=0, column=2, padx=(8, 0), pady=0)
+
+    def _on_input_key_release(self, _event=None) -> None:
+        if self.language_var.get() not in {"Marathi", "Hindi"}:
+            return
+        typed_text = self.input_box.get("1.0", "end-1c")
+        if typed_text and set(typed_text) == {"?"}:
+            self.status_text.set(
+                "Unicode input is not reaching the app. Use a Unicode Devanagari keyboard/font; legacy ISM layouts may send only '?'."
+            )
 
     def _pick_builtin_passage(self, language: str) -> str:
         if language == "Marathi":
