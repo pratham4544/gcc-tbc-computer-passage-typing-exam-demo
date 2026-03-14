@@ -82,8 +82,7 @@ class TypingExamApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Typing Exam Practice")
-        self.root.geometry("1180x760")
-        self.root.minsize(1040, 700)
+        self._configure_window()
         self.root.configure(bg="#f3efe7")
 
         self.selected_profile = tk.StringVar(value="English 30 WPM")
@@ -105,6 +104,8 @@ class TypingExamApp:
         self.local_nirmala_registered = self._try_register_local_nirmala()
         self.setup_banner_image = self._load_png("img1.png")
         self.result_banner_image = self._load_png("img2.png")
+        self.setup_canvas: tk.Canvas | None = None
+        self.setup_scroll_body: ttk.Frame | None = None
 
         self.english_font = ("Segoe UI", 16)
         self.indic_font = self._resolve_indic_font()
@@ -115,6 +116,16 @@ class TypingExamApp:
         self._update_language_mode()
         self._set_passage_for_current_selection()
         self._show_page("setup")
+
+    def _configure_window(self) -> None:
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        width = min(1180, max(900, int(screen_width * 0.9)))
+        height = min(760, max(620, int(screen_height * 0.88)))
+        pos_x = max((screen_width - width) // 2, 0)
+        pos_y = max((screen_height - height) // 2, 0)
+        self.root.geometry(f"{width}x{height}+{pos_x}+{pos_y}")
+        self.root.minsize(900, 620)
 
     def _configure_styles(self) -> None:
         style = ttk.Style()
@@ -177,8 +188,47 @@ class TypingExamApp:
         layout.columnconfigure(0, weight=1)
         layout.rowconfigure(0, weight=1)
 
-        center_card = ttk.LabelFrame(layout, text="Exam Setup", style="Section.TLabelframe", padding=22)
-        center_card.grid(row=0, column=0, sticky="", pady=18)
+        canvas = tk.Canvas(layout, bg="#f3efe7", highlightthickness=0, borderwidth=0)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(layout, orient="vertical", command=canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scroll_body = ttk.Frame(canvas, style="App.TFrame")
+        canvas_window = canvas.create_window((0, 0), window=scroll_body, anchor="n")
+
+        def _sync_setup_scroll_region(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas_width = canvas.winfo_width()
+            if canvas_width > 0:
+                canvas.itemconfigure(canvas_window, width=canvas_width)
+
+        def _resize_setup_card(_event) -> None:
+            width = min(max(_event.width - 48, 760), 960)
+            center_card.configure(width=width)
+
+        def _on_setup_mousewheel(event) -> str | None:
+            if not page.winfo_ismapped():
+                return None
+            delta = event.delta
+            if delta == 0 and getattr(event, "num", None) in (4, 5):
+                delta = 120 if event.num == 4 else -120
+            if delta:
+                canvas.yview_scroll(int(-delta / 120), "units")
+                return "break"
+            return None
+
+        scroll_body.bind("<Configure>", _sync_setup_scroll_region)
+        canvas.bind("<Configure>", _resize_setup_card)
+        canvas.bind_all("<MouseWheel>", _on_setup_mousewheel)
+        canvas.bind_all("<Button-4>", _on_setup_mousewheel)
+        canvas.bind_all("<Button-5>", _on_setup_mousewheel)
+
+        self.setup_canvas = canvas
+        self.setup_scroll_body = scroll_body
+
+        center_card = ttk.LabelFrame(scroll_body, text="Exam Setup", style="Section.TLabelframe", padding=22)
+        center_card.pack(fill="x", expand=True, padx=24, pady=18)
         center_card.columnconfigure(0, weight=1)
         center_card.columnconfigure(1, weight=1)
 
@@ -458,6 +508,9 @@ class TypingExamApp:
                 frame.pack(fill="both", expand=True)
             else:
                 frame.pack_forget()
+
+        if page_name == "setup" and self.setup_canvas is not None:
+            self.setup_canvas.yview_moveto(0)
 
         titles = {
             "setup": "1. Test Setup",
