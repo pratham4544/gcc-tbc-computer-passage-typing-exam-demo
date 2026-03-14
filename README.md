@@ -1,0 +1,85 @@
+# Typing Exam Practice App
+
+Offline desktop typing-practice app for Windows 7/10 candidates.
+
+## Features
+
+- English 30 WPM timed test for 7 minutes
+- English 40 WPM timed test for 7 minutes
+- Marathi 30 test for 7 minutes
+- Practice mode without timer for English or Marathi
+- Random built-in passages
+- Word-matching accuracy calculation
+- On-screen result summary with elapsed time, matched words, accuracy, and WPM
+- Marathi input area uses the `Mangal` font and assumes `ISM V6` is already running in the background
+
+## Local Run
+
+Recommended Python version for Windows 7 compatibility: `Python 3.8.x 64-bit`
+
+```bash
+python app.py
+```
+
+## Build Windows EXE
+
+Install PyInstaller:
+
+```bash
+pip install pyinstaller==5.13.2
+```
+
+Create a single-file executable:
+
+```bash
+pyinstaller --onefile --windowed --name typing-exam-practice app.py
+```
+
+Or on Windows:
+
+```bat
+build_windows.bat
+```
+
+The generated installer-free executable will be available at:
+
+```text
+dist/typing-exam-practice.exe
+```
+
+## Build From GitHub
+
+This repository includes a GitHub Actions workflow at `.github/workflows/build-windows.yml`.
+
+- Push a tag like `v1.0.0` to build the Windows `.exe`
+- GitHub Actions will build `typing-exam-practice.exe` on Windows
+- The file will be available in:
+  - the workflow artifact
+  - the GitHub Release for that tag
+
+## Load DOCX Question Papers
+
+If you copy your exam-paper folder into:
+
+```text
+/home/pratham/Desktop/projects/gcctbc/Oct 2025 exam question paper
+```
+
+the app will automatically scan `.docx` files for:
+
+- English 30 WPM
+- English 40 WPM
+- Marathi 30 WPM
+- Marathi 40 WPM
+- Hindi 30 WPM
+- Hindi 40 WPM
+
+When matching folders are found, the app will use those passages instead of the built-in sample passages.
+
+## Notes
+
+- To support Windows 7, build the executable on a Windows 7/10 machine using Python 3.8 64-bit.
+- `ISM V6` is not bundled in this app. It must be installed and running separately for Marathi typing.
+- Accuracy is calculated by comparing typed words with passage words in the same sequence.
+- On Windows, the app prefers `Mangal`, then `Nirmala UI`, including the bundled `Nirmala UI Regular.ttf` when it can be registered privately.
+- On Ubuntu, Marathi may render as rectangular boxes if Devanagari fonts are not installed. Install a package such as `fonts-noto-core`, and the app will fall back to `Noto Sans Devanagari` when available.
