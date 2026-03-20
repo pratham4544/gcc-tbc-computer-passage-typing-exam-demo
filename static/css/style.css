@@ -282,6 +282,8 @@ button:hover { background-color: var(--btn-default-hover); }
     border-bottom: 1px solid #eee;
 }
 .metric-row:last-child { border-bottom: none; }
+.result-pass { color: #1a7a2e !important; }
+.result-fail { color: #c0392b !important; }
 
 /* ── Institute ────────────────────────────────────────────── */
 .institute-info {
