@@ -13,6 +13,76 @@ Offline desktop typing-practice app for Windows 7/10 candidates.
 - On-screen result summary with elapsed time, matched words, accuracy, and WPM
 - Marathi input area uses the `Mangal` font and assumes `ISM V6` is already running in the background
 
+## How to Run the Software
+
+### Option 1: Run Directly with Python (Linux/Mac/Windows)
+
+**Prerequisites:**
+- Python 3.8 or higher
+- PySide6: `pip install "PySide6<6.6"`
+
+**Run the application:**
+```bash
+python app.py
+```
+
+### Option 2: Run the Pre-built EXE (Windows Only)
+
+Just double-click `dist/typing-exam-practice.exe` (after building it)
+
+## How to Build .EXE File (Windows)
+
+### Easy Method - Use the Batch Script
+
+On Windows, simply double-click or run:
+```bash
+build_windows.bat
+```
+
+This automatically:
+- Installs PySide6
+- Builds the .exe using PyInstaller
+- Creates `dist/typing-exam-practice.exe`
+
+### Manual Method - Build Step-by-Step
+
+1. **Install Python 3.8+ and pyinstaller:**
+   ```bash
+   pip install "PySide6<6.6"
+   pip install pyinstaller==5.13.2
+   ```
+
+2. **Build the EXE:**
+   ```bash
+   pyinstaller --onefile --windowed --name typing-exam-practice ^
+       --hidden-import PySide6.QtCore ^
+       --hidden-import PySide6.QtGui ^
+       --hidden-import PySide6.QtWidgets ^
+       --exclude-module tkinter ^
+       --exclude-module _tkinter ^
+       app.py
+   ```
+
+3. **The .exe file will be at:**
+   ```
+   dist/typing-exam-practice.exe
+   ```
+
+## System Requirements for .EXE
+
+- **Windows**: Windows 7, Windows 10, Windows 11
+- **RAM**: 500 MB minimum
+- **Disk Space**: ~100 MB
+- **Fonts**: Noto Sans Devanagari (for Marathi support)
+- **Input Method**: ISM (Indian Standard Method) for typing Marathi
+
+## Installation (Windows Users)
+
+1. Download `typing-exam-practice.exe` from `dist/` folder
+2. Place it anywhere on your computer
+3. Double-click to run (no installation needed)
+4. No dependencies to install - everything is included
+
 ## Local Run
 
 Recommended Python version for Windows 7 compatibility: `Python 3.8.x 64-bit`

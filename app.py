@@ -662,8 +662,9 @@ class TypingExamApp(QMainWindow):
 
     def _resolve_indic_font(self) -> tuple[str, int]:
         available_set = set(QFontDatabase.families())
+        # Prioritize fonts with better Devanagari support
         preferred = [
-            "Mangal", "Nirmala UI", "Noto Sans Devanagari",
+            "Noto Sans Devanagari", "Noto Sans", "Nirmala UI", "Mangal",
             "Noto Serif Devanagari", "Kalimati", "Lohit Devanagari",
         ]
         for family in preferred:
@@ -678,15 +679,18 @@ class TypingExamApp(QMainWindow):
             return (self._local_nirmala_family, 18)
 
         self._font_info_text = (
-            "No Indic font detected. Install Noto Sans Devanagari on Ubuntu "
-            "or use Windows with Mangal/Nirmala UI."
+            "WARNING: No Indic font detected. Install 'Noto Sans Devanagari' for proper Marathi rendering. "
+            "On Ubuntu: sudo apt install fonts-noto-devanagari | On Windows: Download from fonts.google.com"
         )
         return ("Sans Serif", 16)
 
     def _get_display_font(self, size: int | None = None) -> QFont:
         chosen_size = size or self.english_font_size
         if self._language in {"Marathi", "Hindi"}:
-            return QFont(self.indic_font_family, max(chosen_size, 13))
+            font = QFont(self.indic_font_family, max(chosen_size, 13))
+            # Ensure proper Devanagari text rendering with antialiasing
+            font.setStyleStrategy(QFont.PreferAntialias)
+            return font
         return QFont(self.english_font_family, max(chosen_size, 12))
 
     def _preview_font_size(self) -> int:
@@ -771,6 +775,8 @@ class TypingExamApp(QMainWindow):
             self._render_passages()
         if hasattr(self, "input_box"):
             self._apply_typing_fonts()
+        if hasattr(self, "font_note"):
+            self.font_note.setText(self._font_info_text)
         if hasattr(self, "result_typed_box") and self.active_result:
             if self.page_stack.currentIndex() == 2:
                 self._show_result_page()
