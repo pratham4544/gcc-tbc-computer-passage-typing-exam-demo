@@ -3,11 +3,21 @@ from __future__ import annotations
 import json
 import os
 import random
+import sys
+import threading
+import webbrowser
 import zipfile
 from dataclasses import dataclass
 from xml.etree import ElementTree as ET
 
 from flask import Flask, jsonify, render_template, request
+
+
+def _get_base_dir() -> str:
+    """Return the base directory — works both when running as script and as PyInstaller .exe."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 # ── passages ────────────────────────────────────────────────────────
 
@@ -106,7 +116,7 @@ def match_passage_key(normalized_path: str) -> str | None:
 
 
 def load_external_docx_passages() -> dict[str, list[dict[str, str]]]:
-    root_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), QUESTION_PAPER_DIR)
+    root_dir = os.path.join(_get_base_dir(), QUESTION_PAPER_DIR)
     loaded: dict[str, list[dict[str, str]]] = {key: [] for key in QUESTION_PAPER_KEYS}
     if not os.path.isdir(root_dir):
         return loaded
@@ -194,7 +204,12 @@ def build_profiles_dict() -> dict:
 
 # ── Flask app ───────────────────────────────────────────────────────
 
-app = Flask(__name__)
+BASE_DIR = _get_base_dir()
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+)
 
 
 @app.route("/")
@@ -262,5 +277,7 @@ def score_exam():
 
 
 if __name__ == "__main__":
-    print("Starting Typing Exam Practice at http://127.0.0.1:5000")
+    url = "http://127.0.0.1:5000"
+    print(f"Starting Typing Exam Practice at {url}")
+    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     app.run(host="127.0.0.1", port=5000, debug=False)
