@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from xml.etree import ElementTree as ET
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QFontDatabase, QPixmap, QResizeEvent
+from PySide6.QtGui import QFont, QFontDatabase, QKeyEvent, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QBoxLayout,
@@ -466,6 +466,9 @@ class TypingExamApp(QMainWindow):
         self.input_box = QTextEdit()
         self.input_box.setStyleSheet("background-color: #ffffff; border: 1px solid #ccc;")
         self.input_box.setAcceptRichText(False)
+        # Enable IME/ISM input for Marathi/Hindi typing via Scroll Lock
+        self.input_box.setAttribute(Qt.WA_InputMethodEnabled, True)
+        self.input_box.setInputMethodHints(Qt.ImhNone)
         self.input_box.textChanged.connect(self._on_input_text_changed)
         typing_layout.addWidget(self.input_box)
 
@@ -864,8 +867,15 @@ class TypingExamApp(QMainWindow):
         self.test_running = True
         self.start_time = time.time()
         self._set_time_text()
-        self._set_status_text("Test is running.")
+        if self._language in {"Marathi", "Hindi"}:
+            self._set_status_text(
+                "Test is running. Enable ISM (Scroll Lock) to type in "
+                f"{self._language}."
+            )
+        else:
+            self._set_status_text("Test is running.")
         self._show_page("test")
+        self._ensure_ime_enabled()
         self.input_box.setFocus()
 
         if self.current_profile.duration_minutes is not None:
@@ -995,11 +1005,16 @@ class TypingExamApp(QMainWindow):
         if self._language not in {"Marathi", "Hindi"}:
             return
         typed_text = self.input_box.toPlainText()
-        if typed_text and set(typed_text) == {"?"}:
+        if typed_text and set(typed_text.replace(" ", "").replace("\n", "")) <= {"?"}:
             self._set_status_text(
                 "ISM is sending '?' -- switch ISM to Unicode mode, or use Windows "
                 "Marathi/Hindi keyboard (Settings > Language) instead of legacy ISM."
             )
+
+    def _ensure_ime_enabled(self) -> None:
+        """Re-enable IME on the input box (call before focusing for Marathi/Hindi)."""
+        self.input_box.setAttribute(Qt.WA_InputMethodEnabled, True)
+        self.input_box.setInputMethodHints(Qt.ImhNone)
 
     # ── business logic (unchanged) ─────────────────────────────────
 

@@ -68,13 +68,30 @@ This automatically:
    dist/typing-exam-practice.exe
    ```
 
-## System Requirements for .EXE
+## How to Type Marathi (ISM - Indian Standard Method)
 
-- **Windows**: Windows 7, Windows 10, Windows 11
-- **RAM**: 500 MB minimum
-- **Disk Space**: ~100 MB
-- **Fonts**: Noto Sans Devanagari (for Marathi support)
-- **Input Method**: ISM (Indian Standard Method) for typing Marathi
+### Windows Users:
+1. **Install ISM Software** on your Windows machine
+2. **Press Scroll Lock key** to activate Marathi typing mode
+3. **Start typing** - English keys will now produce Marathi characters
+4. **Press Scroll Lock again** to switch back to English
+
+### Linux Users:
+1. **Install ISM packages:**
+   ```bash
+   sudo apt install ibus-indic-smc ibus-engine-indic
+   ```
+2. **Add Marathi input method** in your system settings
+3. **Switch input method** using keyboard shortcut (usually Ctrl+Space or Super+Space)
+4. **Start typing** in Marathi mode
+
+### macOS Users:
+1. **Go to System Preferences → Keyboard → Input Sources**
+2. **Add "Marathi - Inscript"** layout
+3. **Switch using Ctrl+Space** or the input menu
+4. **Start typing** in Marathi mode
+
+**Important:** Make sure ISM is active before starting the typing test. The application will display Marathi text, but you need ISM running to type Marathi characters.
 
 ## Installation (Windows Users)
 
