@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typing Exam Practice</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        @font-face {
+            font-family: 'Nirmala UI';
+            src: url("{{ url_for('static', filename='fonts/NirmalaUI-Regular.ttf') }}") format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Banner -->
+    <div id="hero">
+        <h1>Offline Typing Exam Practice</h1>
+        <p>Browser-based exam simulator with English, Marathi, Hindi, and optional exam-question DOCX loading.</p>
+    </div>
+
+    <!-- Navigation Bar -->
+    <div id="nav-bar">
+        <span id="page-title">1. Test Setup</span>
+        <span id="status-text">Choose a test type and load a passage.</span>
+    </div>
+
+    <!-- PAGE 1: Setup -->
+    <div id="page-setup" class="page active">
+        <div class="setup-card">
+            <div class="section-group">
+                <h3>Exam Setup</h3>
+                <p class="body-text" style="text-align:center;">Select exam details and start the practice test.</p>
+
+                <div class="form-grid">
+                    <label class="body-text" for="candidate-name">Candidate Name</label>
+                    <input type="text" id="candidate-name" placeholder="Enter your name">
+
+                    <label class="body-text" for="exam-type">Exam Type</label>
+                    <select id="exam-type"></select>
+
+                    <label class="body-text" for="language-select">Language</label>
+                    <select id="language-select">
+                        <option value="English">English</option>
+                        <option value="Marathi">Marathi</option>
+                        <option value="Hindi">Hindi</option>
+                    </select>
+
+                    <label class="body-text">Time</label>
+                    <span id="setup-time" class="value-label">07:00</span>
+                </div>
+            </div>
+
+            <div class="section-group">
+                <h3>Current Passage Preview</h3>
+                <div id="passage-preview" class="passage-display"></div>
+            </div>
+
+            <p id="font-note" class="body-text" style="text-align:center;"></p>
+            <p class="muted-text" style="text-align:center;">
+                Marathi and Hindi need a Devanagari font.
+                This app uses Nirmala UI, Mangal, or Noto Sans Devanagari.
+            </p>
+
+            <div class="actions-center">
+                <button onclick="loadRandomPassage()">Load Random Passage</button>
+                <button class="btn-primary" onclick="startTest()">Start Test</button>
+            </div>
+
+            <div class="institute-info">
+                <h3 class="institute-name">{{ company_name }}</h3>
+                <p class="body-text">Call: {{ company_phone }}</p>
+                <img src="{{ url_for('static', filename='images/img1.png') }}" alt="Institute Banner" class="banner-img">
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 2: Test -->
+    <div id="page-test" class="page">
+        <div class="test-card">
+            <div class="info-bar">
+                <div class="info-card">
+                    <span class="info-title">Exam Type</span>
+                    <span class="info-value" id="header-exam">English 30 WPM</span>
+                </div>
+                <div class="info-card">
+                    <span class="info-title">Language</span>
+                    <span class="info-value" id="header-language">English</span>
+                </div>
+                <div class="info-card">
+                    <span class="info-title">Time Left</span>
+                    <span class="info-value info-mono" id="timer-display">07:00</span>
+                </div>
+            </div>
+
+            <div class="test-split">
+                <div class="section-group test-panel">
+                    <h3>Passage</h3>
+                    <div id="passage-display" class="passage-display"></div>
+                </div>
+                <div class="section-group test-panel">
+                    <h3>Typing Area</h3>
+                    <textarea id="typing-area" spellcheck="false" autocomplete="off" placeholder="Start typing here..."></textarea>
+                </div>
+            </div>
+
+            <div class="test-actions">
+                <button onclick="backToSetup()">Back to Setup</button>
+                <div class="actions-right">
+                    <button onclick="resetTest()">Reset Test</button>
+                    <button class="btn-primary" onclick="finishTest(false)">Finish Test</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAGE 3: Result -->
+    <div id="page-result" class="page">
+        <div class="result-card">
+            <h2 class="result-title">Result Summary</h2>
+
+            <div class="result-content">
+                <div class="metrics-grid">
+                    <div class="metric-row"><span class="body-text">Candidate Name</span><span class="value-label" id="res-candidate">-</span></div>
+                    <div class="metric-row"><span class="body-text">Exam Type</span><span class="value-label" id="res-exam">-</span></div>
+                    <div class="metric-row"><span class="body-text">Language</span><span class="value-label" id="res-language">-</span></div>
+                    <div class="metric-row"><span class="body-text">Passage Source</span><span class="value-label" id="res-source">-</span></div>
+                    <div class="metric-row"><span class="body-text">Elapsed Time</span><span class="value-label" id="res-time">-</span></div>
+                    <div class="metric-row"><span class="body-text">Total Typed Words</span><span class="value-label" id="res-total">-</span></div>
+                    <div class="metric-row"><span class="body-text">Matched Words</span><span class="value-label" id="res-matched">-</span></div>
+                    <div class="metric-row"><span class="body-text">Mistakes</span><span class="value-label" id="res-mistakes">-</span></div>
+                    <div class="metric-row"><span class="body-text">Accuracy</span><span class="value-label" id="res-accuracy">-</span></div>
+                    <div class="metric-row"><span class="body-text">Speed (WPM)</span><span class="value-label" id="res-speed">-</span></div>
+                    <div class="metric-row"><span class="body-text">Marks</span><span class="value-label" id="res-marks">-</span></div>
+                    <div class="metric-row"><span class="body-text">Target</span><span class="value-label" id="res-target">-</span></div>
+                    <div class="metric-row"><span class="body-text">Result</span><span class="value-label" id="res-result">-</span></div>
+                </div>
+
+                <div class="section-group">
+                    <h3>Typed Text Review</h3>
+                    <div id="result-typed-text" class="passage-display"></div>
+                </div>
+            </div>
+
+            <div class="actions-center">
+                <button class="btn-primary" onclick="startNewTest()">New Test</button>
+                <button onclick="retrySameTest()">Retry Same Test</button>
+            </div>
+
+            <div class="section-group institute-section">
+                <img src="{{ url_for('static', filename='images/img2.png') }}" alt="Result Banner" class="banner-img">
+                <h3 class="institute-name">{{ company_name }}</h3>
+                <p class="body-text">{{ company_tagline }}</p>
+                <p class="body-text">Call: {{ company_phone }}</p>
+                <div class="actions-center">
+                    <button class="btn-primary" onclick="window.open('tel:{{ company_phone }}')">Call Institute</button>
+                    <button onclick="alert('{{ company_name }}\nCall: {{ company_phone }}')">Show Number</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embedded data from Flask -->
+    <script>
+        const PROFILES = {{ profiles_json | safe }};
+        const PASSAGES = {{ passages_json | safe }};
+        const CONFIG = {
+            totalMarks: {{ total_marks }},
+            passMarks: {{ pass_marks }},
+            maxMistakes: {{ max_mistakes }},
+            companyName: {{ company_name | tojson }},
+            companyPhone: {{ company_phone | tojson }},
+            companyTagline: {{ company_tagline | tojson }}
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

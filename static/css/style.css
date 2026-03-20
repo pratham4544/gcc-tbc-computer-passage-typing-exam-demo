@@ -1,0 +1,329 @@
+/* ── Variables ─────────────────────────────────────────────── */
+:root {
+    --bg-main: #f3efe7;
+    --bg-card: #fffdf8;
+    --bg-hero: #1f3a5f;
+    --text-hero: #ffffff;
+    --text-hero-sub: #d9e4f2;
+    --text-primary: #183153;
+    --text-body: #243447;
+    --text-muted: #5f6b7a;
+    --text-value: #10233d;
+    --border-card: #e0ddd6;
+    --border-input: #b0b8c1;
+    --bg-info: #eef3f8;
+    --border-info: #d4dde7;
+    --btn-primary-bg: #1f3a5f;
+    --btn-primary-hover: #2a4a72;
+    --btn-default-bg: #f0ede6;
+    --btn-default-hover: #e4e0d8;
+    --bg-passage: #f8fafc;
+}
+
+/* ── Reset & Base ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-body);
+    min-height: 100vh;
+    padding: 18px;
+}
+
+/* ── Font classes ─────────────────────────────────────────── */
+.font-devanagari,
+.font-devanagari textarea,
+.font-devanagari .passage-display {
+    font-family: 'Noto Sans Devanagari', 'Nirmala UI', 'Mangal',
+                 'Noto Serif Devanagari', 'Kalimati', 'Lohit Devanagari', sans-serif !important;
+}
+
+/* ── Hero Banner ──────────────────────────────────────────── */
+#hero {
+    background-color: var(--bg-hero);
+    border-radius: 4px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+}
+#hero h1 {
+    color: var(--text-hero);
+    font-size: 21pt;
+    font-weight: bold;
+}
+#hero p {
+    color: var(--text-hero-sub);
+    font-size: 10pt;
+    margin-top: 4px;
+}
+
+/* ── Nav Bar ──────────────────────────────────────────────── */
+#nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+#page-title {
+    color: var(--text-primary);
+    font-size: 15pt;
+    font-weight: bold;
+}
+#status-text {
+    color: var(--text-muted);
+    font-size: 10pt;
+}
+
+/* ── Page visibility ──────────────────────────────────────── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Section Groups ───────────────────────────────────────── */
+.section-group {
+    background-color: var(--bg-card);
+    border: 1px solid #d0cdc6;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.section-group h3 {
+    color: var(--text-primary);
+    font-size: 11pt;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+/* ── Setup Page ───────────────────────────────────────────── */
+.setup-card {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+/* ── Common text styles ───────────────────────────────────── */
+.body-text { color: var(--text-body); font-size: 10pt; }
+.muted-text { color: var(--text-muted); font-size: 9pt; }
+.value-label { color: var(--text-value); font-size: 12pt; font-weight: bold; }
+
+/* ── Form elements ────────────────────────────────────────── */
+input[type="text"], select {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 10pt;
+    padding: 6px 10px;
+    border: 1px solid var(--border-input);
+    border-radius: 3px;
+    background-color: #ffffff;
+    width: 100%;
+}
+select { cursor: pointer; }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+button {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 10pt;
+    padding: 8px 18px;
+    border: 1px solid var(--border-input);
+    border-radius: 4px;
+    background-color: var(--btn-default-bg);
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+button:hover { background-color: var(--btn-default-hover); }
+
+.btn-primary {
+    font-weight: bold;
+    background-color: var(--btn-primary-bg);
+    color: #ffffff;
+    border: 1px solid #1a3050;
+}
+.btn-primary:hover { background-color: var(--btn-primary-hover); }
+
+.actions-center {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 14px 0;
+}
+
+/* ── Passage Display ──────────────────────────────────────── */
+.passage-display {
+    background-color: var(--bg-passage);
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 12px;
+    font-size: 15px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    min-height: 100px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* ── Test Page ────────────────────────────────────────────── */
+.test-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 4px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 160px);
+}
+
+.info-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.info-card {
+    background-color: var(--bg-info);
+    border: 1px solid var(--border-info);
+    border-radius: 4px;
+    padding: 10px 14px;
+    flex: 1;
+    min-width: 150px;
+}
+.info-title {
+    display: block;
+    color: var(--text-muted);
+    font-size: 9pt;
+    font-weight: bold;
+}
+.info-value {
+    display: block;
+    color: var(--text-value);
+    font-size: 13pt;
+    font-weight: bold;
+    margin-top: 2px;
+}
+.info-mono { font-family: 'Consolas', 'Courier New', monospace; }
+
+.test-split {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+}
+.test-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.test-panel .passage-display {
+    flex: 1;
+    max-height: none;
+}
+.test-panel textarea {
+    flex: 1;
+    width: 100%;
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: #ffffff;
+    resize: none;
+    font-family: inherit;
+}
+
+.test-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.actions-right {
+    display: flex;
+    gap: 8px;
+}
+
+/* ── Result Page ──────────────────────────────────────────── */
+.result-card {
+    max-width: 960px;
+    margin: 0 auto;
+}
+.result-title {
+    color: var(--text-primary);
+    font-size: 18pt;
+    font-weight: bold;
+    margin-bottom: 16px;
+}
+.result-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.metrics-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid #eee;
+}
+.metric-row:last-child { border-bottom: none; }
+
+/* ── Institute ────────────────────────────────────────────── */
+.institute-info {
+    text-align: center;
+    margin-top: 16px;
+}
+.institute-name {
+    color: var(--text-primary);
+    font-size: 13pt;
+    font-weight: bold;
+}
+.institute-section {
+    text-align: center;
+    margin-top: 16px;
+}
+.institute-section h3 { margin-top: 10px; }
+.institute-section p { margin: 4px 0; }
+
+.banner-img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #ccc;
+    padding: 6px;
+    background-color: var(--bg-card);
+    margin: 8px 0;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 12px; }
+::-webkit-scrollbar-track { background: var(--bg-main); }
+::-webkit-scrollbar-thumb {
+    background-color: #c0bdb6;
+    border-radius: 4px;
+    border: 2px solid var(--bg-main);
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .test-split { flex-direction: column; }
+    .info-bar { flex-direction: column; }
+    .result-content { grid-template-columns: 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    #hero h1 { font-size: 16pt; }
+    .test-card { height: auto; min-height: calc(100vh - 160px); }
+}
