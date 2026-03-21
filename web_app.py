@@ -16,7 +16,7 @@ from flask import Flask, jsonify, render_template, request
 def _get_base_dir() -> str:
     """Return the base directory — works both when running as script and as PyInstaller .exe."""
     if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
+        return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
 # ── passages ────────────────────────────────────────────────────────

@@ -3,7 +3,15 @@ setlocal
 
 echo Installing dependencies...
 pip install flask pyinstaller
+if errorlevel 1 (
+    echo.
+    echo ERROR: Failed to install dependencies.
+    echo Make sure Python and pip are in your PATH.
+    pause
+    exit /b 1
+)
 
+echo.
 echo Building Typing Exam Practice (Web) EXE...
 pyinstaller --onefile --name typing-exam-web ^
     --add-data "templates;templates" ^
@@ -14,11 +22,12 @@ pyinstaller --onefile --name typing-exam-web ^
     --exclude-module PySide6 ^
     --exclude-module tkinter ^
     --exclude-module _tkinter ^
-    --icon NONE ^
     web_app.py
 
 if errorlevel 1 (
+    echo.
     echo Build failed.
+    pause
     exit /b 1
 )
 
